@@ -1,0 +1,35 @@
+<?php
+
+namespace App\Http\Resources;
+
+use App\Models\Product;
+use Illuminate\Http\Request;
+use Illuminate\Http\Resources\Json\JsonResource;
+
+/**
+ * @mixin Product
+ */
+class ProductResource extends JsonResource
+{
+    /**
+     * @return array<string, mixed>
+     */
+    public function toArray(Request $request): array
+    {
+        return [
+            'id' => $this->id,
+            'name' => $this->name,
+            'price' => $this->price !== null ? (float) $this->price : null,
+            'sale_price' => $this->sale_price !== null ? (float) $this->sale_price : null,
+            'currency' => $this->currency,
+            'category' => $this->whenLoaded('category', fn () => $this->category?->name),
+            'site' => $this->whenLoaded('site', fn () => $this->site->domain),
+            'in_stock' => $this->in_stock,
+            'product_url' => $this->product_url,
+            'sku' => $this->sku,
+            'brand' => $this->brand,
+            'image' => $this->whenLoaded('image', fn () => $this->image ? new ProductImageResource($this->image) : null),
+            'last_seen_at' => $this->last_seen_at?->toIso8601String(),
+        ];
+    }
+}

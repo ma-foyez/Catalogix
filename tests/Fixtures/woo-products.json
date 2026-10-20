@@ -1,0 +1,26 @@
+[
+  {
+    "id": 501, "name": "Cotton Panjabi &#8211; Navy Blue", "sku": "PJ-NAVY-42",
+    "permalink": "https://deshibazar.com.bd/product/cotton-panjabi-navy-blue/",
+    "prices": {"price": "185000", "regular_price": "220000", "sale_price": "185000", "currency_code": "BDT", "currency_minor_unit": 2},
+    "images": [{"src": "https://deshibazar.com.bd/wp-content/uploads/2026/09/panjabi-navy.jpg"}],
+    "is_in_stock": true,
+    "categories": [{"id": 12, "name": "Panjabi", "slug": "panjabi"}]
+  },
+  {
+    "id": 502, "name": "Eid Special Silk Panjabi", "sku": "PJ-SILK-40",
+    "permalink": "https://deshibazar.com.bd/product/eid-special-silk-panjabi/",
+    "prices": {"price": "350000", "regular_price": "350000", "sale_price": "350000", "currency_code": "BDT", "currency_minor_unit": 2},
+    "images": [{"src": "https://deshibazar.com.bd/wp-content/uploads/2026/09/silk-panjabi.jpg"}],
+    "is_in_stock": true,
+    "categories": [{"id": 12, "name": "Panjabi", "slug": "panjabi"}]
+  },
+  {
+    "id": 503, "name": "Khadi Panjabi Off-White", "sku": "PJ-KHADI-38",
+    "permalink": "https://deshibazar.com.bd/product/khadi-panjabi-off-white/",
+    "prices": {"price": "149000", "regular_price": "149000", "sale_price": "149000", "currency_code": "BDT", "currency_minor_unit": 2},
+    "images": [{"src": "https://deshibazar.com.bd/wp-content/uploads/2026/09/khadi-panjabi.jpg"}],
+    "is_in_stock": false,
+    "categories": [{"id": 12, "name": "Panjabi", "slug": "panjabi"}]
+  }
+]

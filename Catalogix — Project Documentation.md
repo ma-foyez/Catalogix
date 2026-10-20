@@ -1,6 +1,6 @@
 # Catalogix — Project Documentation
 
-Oct 20, 2026 · @Anik Rifat
+Oct 20, 2026 · @M.A Fayez
 
 **Catalogix** is an AI-powered multi-site product extractor: paste one or many website URLs, preview every product with its category, name, price and image, and export it per site or all together as CSV or Excel. Built on Laravel 13 and PHP 8.3+ with MySQL; AI agents run on paid or free providers (including local Ollama) configured from the admin panel.
 

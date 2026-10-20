@@ -3,8 +3,11 @@
 namespace App\Providers;
 
 use Carbon\CarbonImmutable;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -24,6 +27,17 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         $this->configureDefaults();
+        $this->configureRateLimits();
+    }
+
+    /**
+     * Per-user limits: discovery crawls whole sites, so it is the tightest.
+     */
+    protected function configureRateLimits(): void
+    {
+        RateLimiter::for('discoveries', fn (Request $request) => Limit::perMinute(10)->by($request->user()?->id ?: $request->ip()));
+        RateLimiter::for('exports', fn (Request $request) => Limit::perMinute(20)->by($request->user()?->id ?: $request->ip()));
+        RateLimiter::for('api', fn (Request $request) => Limit::perMinute(120)->by($request->user()?->id ?: $request->ip()));
     }
 
     /**

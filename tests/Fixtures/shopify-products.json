@@ -1,0 +1,13 @@
+{
+  "products": [
+    {"id": 9001, "title": "Jamdani Saree – Red & Gold", "handle": "jamdani-saree-red-gold", "vendor": "Tangail Tant", "product_type": "Saree",
+     "variants": [{"price": "8500.00", "compare_at_price": "9500.00", "available": true, "sku": "JS-RG"}],
+     "images": [{"src": "https://cdn.shopify.com/s/files/1/0001/jamdani-red.jpg"}]},
+    {"id": 9002, "title": "Tangail Cotton Saree – Green", "handle": "tangail-cotton-saree-green", "vendor": "Tangail Tant", "product_type": "Saree",
+     "variants": [{"price": "2200.00", "compare_at_price": null, "available": true, "sku": "TC-GR"}],
+     "images": [{"src": "https://cdn.shopify.com/s/files/1/0001/tangail-green.jpg"}]},
+    {"id": 9003, "title": "Rajshahi Silk Saree – Blue", "handle": "rajshahi-silk-saree-blue", "vendor": "Sopura Silk", "product_type": "Saree",
+     "variants": [{"price": "6800.00", "compare_at_price": null, "available": false, "sku": "RS-BL"}],
+     "images": []}
+  ]
+}

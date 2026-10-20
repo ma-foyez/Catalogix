@@ -1,0 +1,13 @@
+{
+  "final_url": "https://bazarexpress.com.bd/groceries",
+  "html": "<html><head><title>Groceries</title></head><body><div id=\"root\"><h1>Groceries</h1></div></body></html>",
+  "links": ["https://bazarexpress.com.bd/groceries", "https://bazarexpress.com.bd/fish-meat"],
+  "json_responses": [
+    {"url": "https://bazarexpress.com.bd/api/v2/config", "body": {"currency": "BDT", "freeDelivery": 999}},
+    {"url": "https://bazarexpress.com.bd/api/v2/products?category=groceries&page=1", "body": {"data": {"products": [
+      {"title": "Rupchanda Soybean Oil 2 ltr", "price": {"amount": 380, "currency": "BDT"}, "image": {"url": "https://cdn.bazarexpress.com.bd/p/rupchanda-2l.jpg"}, "link": "/p/rupchanda-soybean-oil-2l", "available": true},
+      {"title": "Fresh Hilsha (Ilish) 1 kg", "price": {"amount": 1650, "currency": "BDT"}, "image": {"url": "https://cdn.bazarexpress.com.bd/p/ilish-1kg.jpg"}, "link": "/p/fresh-hilsha-1kg", "available": true},
+      {"title": "Radhuni Turmeric Powder 200 gm", "price": {"amount": 95, "currency": "BDT"}, "regularPrice": 110, "image": {"url": "https://cdn.bazarexpress.com.bd/p/radhuni-haldi.jpg"}, "link": "/p/radhuni-turmeric-200g", "available": false}
+    ]}}}
+  ]
+}

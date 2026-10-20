@@ -1,0 +1,69 @@
+<?php
+
+namespace App\Jobs;
+
+use App\Enums\JobStatus;
+use App\Events\RoutesDiscovered;
+use App\Http\Resources\DiscoveryResource;
+use App\Models\Discovery;
+use App\Services\Discovery\DomainDiscoverer;
+use App\Support\Live;
+use DateTimeInterface;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Queue\Queueable;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
+use Throwable;
+
+class DiscoverDomainJob implements ShouldQueue
+{
+    use Queueable;
+
+    public int $timeout = 900;
+
+    public int $maxExceptions = 1;
+
+    public function __construct(public int $discoveryId, public string $domain)
+    {
+        $this->onQueue('discovery');
+    }
+
+    public function retryUntil(): DateTimeInterface
+    {
+        return now()->addHours(2);
+    }
+
+    /**
+     * @return list<object>
+     */
+    public function middleware(): array
+    {
+        return [(new WithoutOverlapping('domain:'.$this->domain))->releaseAfter(10)->expireAfter(960)];
+    }
+
+    public function handle(DomainDiscoverer $discoverer): void
+    {
+        $discovery = Discovery::with('site')->find($this->discoveryId);
+
+        if ($discovery !== null && ! $discovery->status->isFinished()) {
+            $discoverer->run($discovery);
+        }
+    }
+
+    public function failed(?Throwable $exception): void
+    {
+        $discovery = Discovery::with('site')->find($this->discoveryId);
+
+        if ($discovery === null) {
+            return;
+        }
+
+        $discovery->forceFill([
+            'status' => JobStatus::Failed,
+            'error' => mb_substr('Discovery failed: '.($exception?->getMessage() ?? 'unknown error'), 0, 2000),
+            'finished_at' => now(),
+        ])->save();
+
+        $discovery->load('routes');
+        Live::send(new RoutesDiscovered($discovery->id, (new DiscoveryResource($discovery))->resolve()));
+    }
+}
