@@ -1,4 +1,5 @@
 import type { Auth } from '@/types/auth';
+import type { QueueStall } from '@/types/catalogix';
 
 declare module 'react' {
     interface InputHTMLAttributes<T> {
@@ -12,6 +13,7 @@ declare module '@inertiajs/core' {
             name: string;
             auth: Auth;
             sidebarOpen: boolean;
+            queueStalled: QueueStall | null;
             [key: string]: unknown;
         };
     }

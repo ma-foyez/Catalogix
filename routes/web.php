@@ -6,8 +6,11 @@ use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\ScrapeJobController;
 use App\Http\Controllers\SiteController;
 use Illuminate\Support\Facades\Route;
+use Laravel\Fortify\Features;
 
-Route::inertia('/', 'welcome')->name('home');
+Route::inertia('/', 'welcome', [
+    'canRegister' => Features::enabled(Features::registration()),
+])->name('home');
 
 Route::middleware(['auth', 'verified'])->group(function () {
     // Fortify sends users to /dashboard after login; Discover is the app's start page.

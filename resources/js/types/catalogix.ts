@@ -9,6 +9,22 @@ export type TargetStatus =
 
 export type ImageStatus = 'pending' | 'downloaded' | 'failed';
 
+export type DiscoveryStage =
+    | 'waiting'
+    | 'home'
+    | 'sitemaps'
+    | 'catalogue'
+    | 'menu'
+    | 'probing'
+    | 'rendering'
+    | 'finished';
+
+export type QueueStall = {
+    queues: string[];
+    waiting: number;
+    command: string;
+};
+
 export type ScoreLabel = 'high' | 'medium' | 'low' | 'none';
 
 export type DiscoveredRoute = {
@@ -36,6 +52,11 @@ export type Discovery = {
         blocked_reason: string | null;
     };
     status: RunStatus;
+    stage: DiscoveryStage;
+    stage_label: string;
+    candidates: number;
+    probed: number;
+    to_probe: number;
     routes_found: number;
     error: string | null;
     started_at: string | null;

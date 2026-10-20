@@ -1,5 +1,6 @@
 <?php
 
+use App\Enums\DiscoveryStage;
 use App\Enums\JobStatus;
 use App\Enums\Platform;
 use App\Enums\RouteSource;
@@ -8,6 +9,7 @@ use App\Models\Discovery;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Discovery\DomainDiscoverer;
+use App\Services\Discovery\RouteProber;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
@@ -47,7 +49,11 @@ it('suggests scored product routes for a bare domain', function () {
         ->and($routes['/category/snacks']->is_selected)->toBeFalse()
         ->and($routes->has('/blog'))->toBeFalse()
         ->and($routes->has('/cart'))->toBeFalse()
-        ->and($discovery->routes_found)->toBeGreaterThanOrEqual(3);
+        ->and($discovery->routes_found)->toBeGreaterThanOrEqual(3)
+        ->and($discovery->stage)->toBe(DiscoveryStage::Finished)
+        ->and($discovery->candidates)->toBeGreaterThanOrEqual(4)
+        ->and($discovery->to_probe)->toBeGreaterThan(0)
+        ->and($discovery->probed)->toBe($discovery->to_probe);
 
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'facebook.com'));
     Http::assertNotSent(fn ($request) => str_contains($request->url(), 'post-sitemap'));
@@ -105,4 +111,15 @@ it('rejects input that is not a domain', function () {
     $this->actingAs(User::factory()->create())
         ->post(route('discoveries.store'), ['domain' => 'hello world'])
         ->assertSessionHasErrors('domain');
+});
+
+it('ignores product counts hidden in scripts and on pages without products', function () {
+    $prober = app(RouteProber::class);
+    $json = '<script>window.__STATE__ = {"label": "590 items", "total": "15000 products"};</script>';
+    $card = fn (int $i) => "<div class=\"product-card\"><img src=\"https://shop.test/p{$i}.jpg\"><a href=\"/p/{$i}\">Product {$i}</a><span class=\"price\">৳ ".(100 + $i).'</span></div>';
+    $listing = '<html><body>'.$json.'<div class="cart"><b>Shipping: ৳ 59</b><i>0 items</i></div><p>Showing 1-4 of 132 results</p><div class="grid">'.implode('', array_map($card, range(1, 4))).'</div></body></html>';
+    $landing = '<html><body>'.$json.'<h1>Meat &amp; Fish</h1><a href="/beef">Beef</a></body></html>';
+
+    expect($prober->evaluate($listing, 'https://shop.test/snacks')->estProducts)->toBe(132)
+        ->and($prober->evaluate($landing, 'https://shop.test/meat-fish')->estProducts)->toBe(0);
 });

@@ -1,7 +1,8 @@
-import { Head, Link, router } from '@inertiajs/react';
+import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEcho } from '@laravel/echo-react';
 import {
     AlertTriangle,
+    Clock,
     ExternalLink,
     ImageOff,
     PackageSearch,
@@ -28,6 +29,7 @@ import {
     SelectValue,
 } from '@/components/ui/select';
 import { Skeleton } from '@/components/ui/skeleton';
+import { Spinner } from '@/components/ui/spinner';
 import {
     Table,
     TableBody,
@@ -36,6 +38,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { useThrottledReload } from '@/hooks/use-throttled-reload';
 import { formatCount, formatTaka } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -115,6 +118,13 @@ export default function JobShow({
     const progress =
         routes.length > 0 ? Math.round((finished / routes.length) * 100) : 0;
     const running = job.status === 'queued' || job.status === 'running';
+    const { queueStalled } = usePage().props;
+    const stalled =
+        job.status === 'queued' &&
+        (queueStalled?.queues.includes('pages') ?? false);
+    const crawling = routes.find((route) => route.status === 'crawling');
+
+    useLivePoll(running || imageStats.pending > 0, LIVE_PROPS, 3000);
     const activeRoute =
         routes.find((route) => String(route.id) === filters.route) ?? null;
     const problemRoutes = routes.filter(
@@ -254,9 +264,17 @@ export default function JobShow({
                                 }}
                             />
                         </div>
-                        <p className="text-xs text-muted-foreground">
-                            {finished} of {routes.length} routes finished
-                        </p>
+                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
+                            <JobActivity
+                                running={running}
+                                stalled={stalled}
+                                crawling={crawling}
+                                pendingImages={imageStats.pending}
+                            />
+                            <span className="tabular-nums">
+                                {finished} of {routes.length} routes finished
+                            </span>
+                        </div>
                     </div>
                 </header>
 
@@ -546,6 +564,66 @@ export default function JobShow({
             </div>
         </>
     );
+}
+
+function JobActivity({
+    running,
+    stalled,
+    crawling,
+    pendingImages,
+}: {
+    running: boolean;
+    stalled: boolean;
+    crawling: ScrapeTarget | undefined;
+    pendingImages: number;
+}) {
+    if (stalled) {
+        return (
+            <span className="flex items-center gap-1.5 text-warning">
+                <Clock className="size-3" /> Waiting for a queue worker
+            </span>
+        );
+    }
+
+    if (crawling) {
+        return (
+            <span className="flex min-w-0 items-center gap-1.5 text-primary">
+                <Spinner className="size-3 shrink-0" />
+                <span className="font-medium">Extracting</span>
+                <span className="truncate text-muted-foreground">
+                    {crawling.category ?? new URL(crawling.url).pathname} · page{' '}
+                    {crawling.pages_crawled + 1} ·{' '}
+                    {formatCount(crawling.products_found)} products so far
+                </span>
+            </span>
+        );
+    }
+
+    if (running) {
+        return (
+            <span className="flex items-center gap-1.5 text-primary">
+                <Spinner className="size-3" />
+                <span className="font-medium">Queued</span>
+                <span className="text-muted-foreground">
+                    next page starts after a short polite pause…
+                </span>
+            </span>
+        );
+    }
+
+    if (pendingImages > 0) {
+        return (
+            <span className="flex items-center gap-1.5 text-primary">
+                <Spinner className="size-3" />
+                <span className="font-medium">Downloading images</span>
+                <span className="text-muted-foreground">
+                    {formatCount(pendingImages)} left
+                </span>
+            </span>
+        );
+    }
+
+    return <span />;
 }
 
 function RouteTab({

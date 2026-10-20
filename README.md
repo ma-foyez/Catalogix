@@ -72,17 +72,24 @@ Set `PYTHON_BIN` in `.env` (`python` on Windows, `python3` on Linux). Laravel ca
 
 ## Run locally
 
-Four processes:
+One command starts everything — the server, Vite, Reverb and two queue workers (one for discovery and pages, one for images and exports):
+
+```bash
+composer dev
+```
+
+Or run the pieces yourself:
 
 ```bash
 php artisan serve                     # http://localhost:8000
 npm run dev                           # Vite (or rely on npm run build)
-php artisan reverb:start              # live updates on :8080
+php artisan reverb:start              # live updates on :8080 (optional: pages poll without it)
 php artisan queue:work --queue=discovery,pages,images,exports,default --timeout=960
 ```
 
+Without a queue worker nothing runs: discoveries stay at "Waiting for a worker" and the app shows a banner with the command to start one. A plain `queue:work` or `queue:listen` only listens on the `default` queue, where Catalogix sends nothing — always pass `--queue=…`. Restart workers after changing PHP code (`php artisan queue:restart`); they keep the old code in memory.
+
 Run 2–4 workers to extract several domains in parallel; jobs for the same domain still go one at a time.
-`composer dev` starts the server, a queue listener, logs and Vite together (add Reverb separately).
 
 ## Configuration
 

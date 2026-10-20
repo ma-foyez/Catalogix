@@ -14,6 +14,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { useThrottledReload } from '@/hooks/use-throttled-reload';
 import { formatBytes, formatCount, timeAgo } from '@/lib/format';
 import { index as exportsIndex } from '@/routes/exports';
@@ -41,6 +42,14 @@ export default function ExportsIndex({
 }) {
     const { auth } = usePage<{ auth: Auth }>().props;
     const reload = useThrottledReload(['exports'], 300);
+
+    useLivePoll(
+        exports.data.some(
+            (file) => file.status === 'pending' || file.status === 'processing',
+        ),
+        ['exports'],
+        3000,
+    );
 
     useEcho(
         `App.Models.User.${auth.user.id}`,
@@ -106,7 +115,10 @@ export default function ExportsIndex({
                                                     {file.file_name ??
                                                         `${file.format_label} export`}
                                                 </p>
-                                                <p className="text-xs text-muted-foreground">
+                                                <p
+                                                    suppressHydrationWarning
+                                                    className="text-xs text-muted-foreground"
+                                                >
                                                     {file.format_label} ·{' '}
                                                     {timeAgo(file.created_at)}
                                                 </p>
@@ -144,7 +156,10 @@ export default function ExportsIndex({
                                                 {file.status === 'ready' &&
                                                     file.expires_at &&
                                                     !expired && (
-                                                        <p className="mt-1 text-xs text-muted-foreground">
+                                                        <p
+                                                            suppressHydrationWarning
+                                                            className="mt-1 text-xs text-muted-foreground"
+                                                        >
                                                             expires{' '}
                                                             {timeAgo(
                                                                 file.expires_at,

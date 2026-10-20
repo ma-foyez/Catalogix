@@ -2,11 +2,15 @@
 
 namespace App\Providers;
 
+use App\Support\QueueHealth;
 use Carbon\CarbonImmutable;
 use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Foundation\DevCommands;
 use Illuminate\Http\Request;
+use Illuminate\Queue\Events\JobPopping;
 use Illuminate\Support\Facades\Date;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
@@ -28,6 +32,19 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->configureDefaults();
         $this->configureRateLimits();
+        $this->configureQueues();
+    }
+
+    /**
+     * Workers report which queues they listen on, and `composer dev` starts workers on the right queues.
+     */
+    protected function configureQueues(): void
+    {
+        Event::listen(JobPopping::class, fn (JobPopping $event) => QueueHealth::heartbeat($event->queue));
+
+        // The framework default listens on "default" only, where Catalogix sends nothing.
+        DevCommands::artisan('queue:listen --queue=discovery,pages,exports,default --timeout=0', 'queue');
+        DevCommands::artisan('queue:listen --queue=images,exports --timeout=0', 'images');
     }
 
     /**

@@ -2,6 +2,7 @@
 
 namespace App\Services\Discovery;
 
+use App\Enums\DiscoveryStage;
 use App\Enums\JobStatus;
 use App\Enums\RouteSource;
 use App\Events\RoutesDiscovered;
@@ -52,7 +53,15 @@ final class DomainDiscoverer
         $this->fetched = [];
         $site = $discovery->site;
 
-        $discovery->forceFill(['status' => JobStatus::Running, 'started_at' => now(), 'error' => null])->save();
+        $discovery->forceFill([
+            'status' => JobStatus::Running,
+            'stage' => DiscoveryStage::Home,
+            'candidates' => 0,
+            'probed' => 0,
+            'to_probe' => 0,
+            'started_at' => now(),
+            'error' => null,
+        ])->save();
         $discovery->routes()->delete();
         $this->announce($discovery);
 
@@ -76,8 +85,13 @@ final class DomainDiscoverer
 
         $candidates = new CandidateSet($site->domain, $this->classifier);
 
+        $this->stage($discovery, DiscoveryStage::Sitemaps);
         $this->fromSitemaps($candidates, $base);
+
+        $this->stage($discovery, DiscoveryStage::Catalogue, $candidates);
         $this->fromPlatform($candidates, $site, $base, $home->body);
+
+        $this->stage($discovery, DiscoveryStage::Menu, $candidates);
         $this->fromMenus($candidates, $site, $base, $home);
 
         $candidates->add($base.'/', RouteSource::Menu, 'Home');
@@ -199,8 +213,12 @@ final class DomainDiscoverer
         $probed = 0;
         $best = 0;
         $weak = [];
+        $ranked = $candidates->ranked();
 
-        foreach ($candidates->ranked() as $candidate) {
+        $discovery->forceFill(['to_probe' => min(count($ranked), $maxProbes)])->save();
+        $this->stage($discovery, DiscoveryStage::Probing, $candidates);
+
+        foreach ($ranked as $candidate) {
             if ($probed >= $maxProbes) {
                 $this->store($discovery, $candidate, new ProbeResult(
                     score: $candidate->source === RouteSource::PlatformApi && $candidate->estProducts > 0 ? 70 : 0,
@@ -227,6 +245,7 @@ final class DomainDiscoverer
 
             $route = $this->store($discovery, $candidate, $result);
             $best = max($best, $route->score);
+            $discovery->forceFill(['probed' => $probed])->save();
 
             if ($route->score < 30 && $result->blockedReason === null) {
                 $weak[] = $route;
@@ -238,6 +257,7 @@ final class DomainDiscoverer
         }
 
         if ($best < 30 && $weak !== []) {
+            $this->stage($discovery, DiscoveryStage::Rendering);
             $this->retryWithJavaScript($site, $weak);
         }
     }
@@ -312,9 +332,23 @@ final class DomainDiscoverer
     {
         $discovery->forceFill([
             'status' => $status,
+            'stage' => DiscoveryStage::Finished,
             'error' => $error,
             'routes_found' => $discovery->routes()->where('score', '>', 0)->count(),
             'finished_at' => now(),
+        ])->save();
+
+        $this->announce($discovery);
+    }
+
+    /**
+     * Record the step the discovery has reached and tell anyone watching.
+     */
+    private function stage(Discovery $discovery, DiscoveryStage $stage, ?CandidateSet $candidates = null): void
+    {
+        $discovery->forceFill([
+            'stage' => $stage,
+            'candidates' => $candidates?->count() ?? $discovery->candidates,
         ])->save();
 
         $this->announce($discovery);

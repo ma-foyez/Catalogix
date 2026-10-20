@@ -72,7 +72,8 @@ final class RouteProber
 
         $count = count($best);
         $images = array_slice(array_values(array_filter(array_column($best, 'image_url'))), 0, 3);
-        $estimate = max($count, $this->advertisedCount($html));
+        // "120 products" text only means something on a page that actually lists products.
+        $estimate = $count > 0 ? max($count, $this->advertisedCount($html)) : 0;
 
         return new ProbeResult(
             score: $this->score($count, $matchesListingPattern),
@@ -117,8 +118,8 @@ final class RouteProber
      */
     private function advertisedCount(string $html): int
     {
-        // preg_replace gives null when a huge page exceeds PCRE limits; counting script text then is harmless.
-        $text = strip_tags(preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', ' ', $html) ?? $html);
+        // A space at every tag boundary: "৳ 59</b><i>0 items" must not read as "590 items".
+        $text = strip_tags(str_replace('<', ' <', $this->withoutScripts($html)));
 
         if (preg_match_all('/(?:of\s+)?([0-9০-৯][0-9০-৯,]*)\s+(?:products|items|results|পণ্য)/iu', $text, $matches)) {
             $numbers = array_map(fn (string $n) => (int) str_replace(',', '', PriceParser::toAsciiDigits($n)), $matches[1]);
@@ -127,6 +128,32 @@ final class RouteProber
         }
 
         return 0;
+    }
+
+    /**
+     * Drops <script> and <style> blocks with plain string search: a regex hits PCRE limits on
+     * multi-megabyte pages, and the JSON left behind is full of "590 items"-style numbers.
+     */
+    private function withoutScripts(string $html): string
+    {
+        $out = '';
+        $offset = 0;
+        $lower = strtolower($html);
+
+        while (preg_match('/<(script|style)\b/', $lower, $match, PREG_OFFSET_CAPTURE, $offset) === 1) {
+            $start = $match[0][1];
+            $end = strpos($lower, '</'.$match[1][0], $start);
+            $out .= substr($html, $offset, $start - $offset).' ';
+
+            if ($end === false) {
+                return $out;
+            }
+
+            $close = strpos($lower, '>', $end);
+            $offset = $close === false ? strlen($html) : $close + 1;
+        }
+
+        return $out.substr($html, $offset);
     }
 
     private function heading(string $html, string $url): ?string

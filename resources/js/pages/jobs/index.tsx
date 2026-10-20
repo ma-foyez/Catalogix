@@ -13,6 +13,7 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useLivePoll } from '@/hooks/use-live-poll';
 import { formatCount, timeAgo } from '@/lib/format';
 import { discover } from '@/routes';
 import { index as jobsIndex, show } from '@/routes/jobs';
@@ -27,6 +28,14 @@ import type { Paginated, ScrapeJob } from '@/types/catalogix';
  * States: empty, list, paginated.
  */
 export default function JobsIndex({ jobs }: { jobs: Paginated<ScrapeJob> }) {
+    useLivePoll(
+        jobs.data.some(
+            (job) => job.status === 'queued' || job.status === 'running',
+        ),
+        ['jobs'],
+        3000,
+    );
+
     return (
         <>
             <Head title="History" />
@@ -84,7 +93,10 @@ export default function JobsIndex({ jobs }: { jobs: Paginated<ScrapeJob> }) {
                                                 {job.domain ?? `Job #${job.id}`}
                                             </Link>
                                         </TableCell>
-                                        <TableCell className="text-sm text-muted-foreground">
+                                        <TableCell
+                                            suppressHydrationWarning
+                                            className="text-sm text-muted-foreground"
+                                        >
                                             {timeAgo(job.created_at)}
                                         </TableCell>
                                         <TableCell className="text-right font-mono text-sm tabular-nums">

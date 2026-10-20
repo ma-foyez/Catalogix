@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Enums\DiscoveryStage;
 use App\Enums\JobStatus;
 use App\Jobs\DiscoverDomainJob;
 use App\Models\Discovery;
@@ -32,7 +33,17 @@ final class DiscoveryService
 
     public function restart(Discovery $discovery): Discovery
     {
-        $discovery->forceFill(['status' => JobStatus::Queued, 'error' => null, 'routes_found' => 0, 'finished_at' => null])->save();
+        $discovery->forceFill([
+            'status' => JobStatus::Queued,
+            'stage' => DiscoveryStage::Waiting,
+            'candidates' => 0,
+            'probed' => 0,
+            'to_probe' => 0,
+            'error' => null,
+            'routes_found' => 0,
+            'started_at' => null,
+            'finished_at' => null,
+        ])->save();
 
         DiscoverDomainJob::dispatch($discovery->id, $discovery->site->domain);
 

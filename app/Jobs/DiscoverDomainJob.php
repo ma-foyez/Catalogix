@@ -2,6 +2,7 @@
 
 namespace App\Jobs;
 
+use App\Enums\DiscoveryStage;
 use App\Enums\JobStatus;
 use App\Events\RoutesDiscovered;
 use App\Http\Resources\DiscoveryResource;
@@ -59,6 +60,7 @@ class DiscoverDomainJob implements ShouldQueue
 
         $discovery->forceFill([
             'status' => JobStatus::Failed,
+            'stage' => DiscoveryStage::Finished,
             'error' => mb_substr('Discovery failed: '.($exception?->getMessage() ?? 'unknown error'), 0, 2000),
             'finished_at' => now(),
         ])->save();
