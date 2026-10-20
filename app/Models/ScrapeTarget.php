@@ -56,7 +56,7 @@ class ScrapeTarget extends Model
 
     public function site(): Site
     {
-        return $this->scrapeJob->discovery?->site
+        return $this->scrapeJob->discovery->site
             ?? Site::forHost((string) parse_url($this->url, PHP_URL_HOST));
     }
 

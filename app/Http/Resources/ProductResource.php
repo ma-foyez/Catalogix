@@ -28,7 +28,7 @@ class ProductResource extends JsonResource
             'product_url' => $this->product_url,
             'sku' => $this->sku,
             'brand' => $this->brand,
-            'image' => $this->whenLoaded('image', fn () => $this->image ? new ProductImageResource($this->image) : null),
+            'image' => $this->whenLoaded('image', fn () => $this->image ? (new ProductImageResource($this->image))->resolve($request) : null),
             'last_seen_at' => $this->last_seen_at?->toIso8601String(),
         ];
     }

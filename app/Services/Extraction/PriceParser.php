@@ -65,7 +65,8 @@ final class PriceParser
                 continue;
             }
 
-            $amount = $match[1][0] !== '' ? $match[1][0] : ($match[2][0] ?? '');
+            // Group 1 is "৳ 120" style, group 2 "120 টাকা" style; only one of them matched.
+            $amount = ($match[1][0] ?? '') !== '' ? $match[1][0] : ($match[2][0] ?? '');
             $price = self::parse($amount);
 
             if ($price !== null) {

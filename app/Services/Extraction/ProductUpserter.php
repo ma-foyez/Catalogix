@@ -91,11 +91,12 @@ final class ProductUpserter
             array_push($productIds, ...$ids->values()->all());
         }
 
-        $pendingImageIds = ProductImage::query()
+        $pendingImageIds = array_values(ProductImage::query()
             ->whereIn('product_id', $productIds)
             ->where('status', ImageStatus::Pending)
             ->pluck('id')
-            ->all();
+            ->map(fn ($id) => (int) $id)
+            ->all());
 
         return new UpsertResult($productIds, $newForTarget, $pendingImageIds);
     }

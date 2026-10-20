@@ -27,6 +27,9 @@ final class RobotsPolicy
         }
 
         try {
+            // spatie/robots-txt splits on PHP_EOL ("\r\n" on Windows), so normalise line endings first.
+            $content = (string) preg_replace("/\r\n|\r|\n/", PHP_EOL, $content);
+
             return RobotsTxt::create($content)->allows($url, self::AGENT_TOKEN);
         } catch (Throwable) {
             return true;

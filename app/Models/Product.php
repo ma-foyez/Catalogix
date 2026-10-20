@@ -2,12 +2,12 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -23,8 +23,8 @@ use Illuminate\Support\Carbon;
  * @property string|null $brand
  * @property bool|null $in_stock
  * @property array<string, mixed>|null $raw
- * @property Carbon|null $first_seen_at
- * @property Carbon|null $last_seen_at
+ * @property CarbonImmutable|null $first_seen_at
+ * @property CarbonImmutable|null $last_seen_at
  * @property-read Site $site
  * @property-read Category|null $category
  * @property-read ProductImage|null $image

@@ -18,7 +18,7 @@ class ScrapeJobFactory extends Factory
 
         return [
             'discovery_id' => $discovery,
-            'user_id' => fn (array $attributes) => Discovery::find($attributes['discovery_id'])?->user_id,
+            'user_id' => fn (array $attributes) => Discovery::whereKey($attributes['discovery_id'])->value('user_id'),
             'status' => JobStatus::Queued,
         ];
     }

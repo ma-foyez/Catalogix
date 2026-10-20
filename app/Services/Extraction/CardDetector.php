@@ -132,7 +132,7 @@ final class CardDetector
 
     private function isCard(DOMXPath $xpath, DOMElement $element): bool
     {
-        $hasImage = strtolower($element->tagName) === 'img' || ($xpath->query('.//img', $element)?->length ?? 0) > 0;
+        $hasImage = strtolower($element->tagName) === 'img' || $this->count($xpath, './/img', $element) > 0;
 
         if (! $hasImage) {
             return false;
@@ -148,15 +148,22 @@ final class CardDetector
             return true;
         }
 
-        return ($xpath->query('.//*[contains(translate(@class, "PRICE", "price"), "price")]', $element)?->length ?? 0) > 0
+        return $this->count($xpath, './/*[contains(translate(@class, "PRICE", "price"), "price")]', $element) > 0
             && preg_match('/[0-9০-৯]/u', $text) === 1;
+    }
+
+    private function count(DOMXPath $xpath, string $query, DOMElement $context): int
+    {
+        $nodes = $xpath->query($query, $context);
+
+        return $nodes === false ? 0 : $nodes->length;
     }
 
     private function hasLink(DOMXPath $xpath, DOMElement $element): bool
     {
         return strtolower($element->tagName) === 'a'
-            || ($xpath->query('.//a[@href]', $element)?->length ?? 0) > 0
-            || ($xpath->query('ancestor::a[@href]', $element)?->length ?? 0) > 0;
+            || $this->count($xpath, './/a[@href]', $element) > 0
+            || $this->count($xpath, 'ancestor::a[@href]', $element) > 0;
     }
 
     /**

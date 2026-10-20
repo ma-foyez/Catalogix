@@ -32,6 +32,7 @@
         <env name="CATALOGIX_PAGE_DELAY_MAX" value="0"/>
         <env name="CATALOGIX_IMAGE_DELAY_MS" value="0"/>
         <env name="FILESYSTEM_DISK" value="local"/>
+        <env name="INERTIA_SSR_ENABLED" value="false"/>
         <env name="SESSION_DRIVER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>

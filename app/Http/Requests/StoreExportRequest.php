@@ -7,6 +7,7 @@ use App\Enums\ExportLayout;
 use App\Enums\ExportScope;
 use App\Models\ScrapeJob;
 use App\Models\ScrapeTarget;
+use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -32,6 +33,8 @@ class StoreExportRequest extends FormRequest
 
     /**
      * The user must own the job or route they export.
+     *
+     * @return list<Closure(Validator): void>
      */
     public function after(): array
     {

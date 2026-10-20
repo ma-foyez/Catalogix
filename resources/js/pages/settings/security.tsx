@@ -127,7 +127,6 @@ export default function Security(props: Props) {
                 requiresConfirmation={props.requiresConfirmation}
                 twoFactorEnabled={props.twoFactorEnabled}
             />
-
         </>
     );
 }

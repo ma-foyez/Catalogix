@@ -43,7 +43,7 @@ class DiscoveryController extends Controller
         Gate::authorize('view', $discovery);
 
         return Inertia::render('discover/show', [
-            'discovery' => new DiscoveryResource($discovery->load(['site', 'routes'])),
+            'discovery' => (new DiscoveryResource($discovery->load(['site', 'routes'])))->resolve(),
         ]);
     }
 

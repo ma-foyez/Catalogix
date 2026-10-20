@@ -16,6 +16,9 @@ export default defineConfig({
                 bunny('Instrument Sans', {
                     weights: [400, 500, 600],
                 }),
+                bunny('JetBrains Mono', {
+                    weights: [400, 500],
+                }),
             ],
         }),
         inertia(),
@@ -66,6 +69,8 @@ export default defineConfig({
         ignorePatterns: [
             '.github/**',
             'composer.json',
+            'tests/Fixtures/**',
+            '**/*.md',
             'resources/js/components/ui/*',
             'resources/views/mail/*',
         ],

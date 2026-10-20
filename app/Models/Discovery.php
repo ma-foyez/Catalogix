@@ -3,12 +3,13 @@
 namespace App\Models;
 
 use App\Enums\JobStatus;
+use Carbon\CarbonImmutable;
+use Database\Factories\DiscoveryFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -17,13 +18,14 @@ use Illuminate\Support\Carbon;
  * @property JobStatus $status
  * @property int $routes_found
  * @property string|null $error
- * @property Carbon|null $started_at
- * @property Carbon|null $finished_at
+ * @property CarbonImmutable|null $started_at
+ * @property CarbonImmutable|null $finished_at
  * @property-read Site $site
  */
 #[Fillable(['user_id', 'site_id', 'status', 'routes_found', 'error', 'started_at', 'finished_at'])]
 class Discovery extends Model
 {
+    /** @use HasFactory<DiscoveryFactory> */
     use HasFactory;
 
     protected function casts(): array

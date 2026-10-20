@@ -5,16 +5,17 @@ namespace App\Http\Controllers;
 use App\Enums\ImageStatus;
 use App\Http\Resources\ProductResource;
 use App\Http\Resources\ScrapeJobResource;
-use App\Models\Category;
 use App\Models\ProductImage;
 use App\Models\ScrapeJob;
 use App\Services\ExtractionService;
 use App\Services\JobProductsQuery;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Inertia\Inertia;
 use Inertia\Response;
+use stdClass;
 
 class ScrapeJobController extends Controller
 {
@@ -40,7 +41,7 @@ class ScrapeJobController extends Controller
         $filters = $request->only(['route', 'category', 'search', 'image']);
 
         return Inertia::render('jobs/show', [
-            'job' => new ScrapeJobResource($job->load(['discovery.site', 'targets.discoveredRoute'])),
+            'job' => (new ScrapeJobResource($job->load(['discovery.site', 'targets.discoveredRoute'])))->resolve(),
             'products' => ProductResource::collection($products->for($job, $filters)->paginate(50)->withQueryString()),
             'filters' => [
                 'route' => $filters['route'] ?? null,
@@ -92,18 +93,18 @@ class ScrapeJobController extends Controller
      */
     private function categories(ScrapeJob $job): array
     {
-        return Category::query()
+        return array_values(DB::table('categories')
             ->select('categories.id', 'categories.name')
+            ->selectRaw('count(distinct products.id) as product_count')
             ->join('products', 'products.category_id', '=', 'categories.id')
             ->join('product_scrape_target', 'product_scrape_target.product_id', '=', 'products.id')
             ->join('scrape_targets', 'scrape_targets.id', '=', 'product_scrape_target.scrape_target_id')
             ->where('scrape_targets.scrape_job_id', $job->id)
             ->groupBy('categories.id', 'categories.name')
             ->orderBy('categories.name')
-            ->selectRaw('count(distinct products.id) as product_count')
             ->get()
-            ->map(fn ($row) => ['id' => (int) $row->id, 'name' => (string) $row->name, 'count' => (int) $row->product_count])
-            ->all();
+            ->map(fn (stdClass $row) => ['id' => (int) $row->id, 'name' => (string) $row->name, 'count' => (int) $row->product_count])
+            ->all());
     }
 
     /**

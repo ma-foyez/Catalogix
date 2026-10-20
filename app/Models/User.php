@@ -35,6 +35,15 @@ class User extends Authenticatable
     use HasApiTokens, HasFactory, Notifiable, TwoFactorAuthenticatable;
 
     /**
+     * New users (registration, factories) are regular users until promoted.
+     *
+     * @var array<string, mixed>
+     */
+    protected $attributes = [
+        'is_admin' => false,
+    ];
+
+    /**
      * Get the attributes that should be cast.
      *
      * @return array<string, string>

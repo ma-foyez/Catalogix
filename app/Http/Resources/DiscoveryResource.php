@@ -33,7 +33,7 @@ class DiscoveryResource extends JsonResource
             'started_at' => $this->started_at?->toIso8601String(),
             'finished_at' => $this->finished_at?->toIso8601String(),
             'created_at' => $this->created_at?->toIso8601String(),
-            'routes' => DiscoveredRouteResource::collection($this->whenLoaded('routes')),
+            'routes' => $this->whenLoaded('routes', fn () => DiscoveredRouteResource::collection($this->routes)->resolve($request)),
         ];
     }
 }

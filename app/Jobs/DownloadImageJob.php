@@ -95,11 +95,12 @@ class DownloadImageJob implements ShouldBeUnique, ShouldQueue
 
     private function announce(ProductImage $image): void
     {
-        $jobIds = ScrapeTarget::query()
+        $jobIds = array_values(ScrapeTarget::query()
             ->whereHas('products', fn ($query) => $query->whereKey($image->product_id))
             ->distinct()
             ->pluck('scrape_job_id')
-            ->all();
+            ->map(fn ($id) => (int) $id)
+            ->all());
 
         if ($jobIds !== []) {
             Live::send(new ImageDownloaded($jobIds, $image->product_id, (new ProductImageResource($image))->resolve()));

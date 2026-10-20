@@ -16,7 +16,7 @@ use Illuminate\Contracts\Filesystem\Filesystem;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Str;
+use Maatwebsite\Excel\Concerns\Export as ExcelExport;
 use Maatwebsite\Excel\Excel as ExcelWriter;
 use Maatwebsite\Excel\Facades\Excel;
 use RuntimeException;
@@ -100,7 +100,7 @@ final class ExportBuilder
 
         foreach ($counts->groupBy('site_id') as $siteId => $categories) {
             $site = Site::find($siteId);
-            $siteName = Str::slug($site->domain ?? 'site-'.$siteId);
+            $siteName = $this->fileSafe($site->domain ?? 'site-'.$siteId);
             $siteQuery = (clone $query)->where('products.site_id', $siteId);
 
             if ($categories->sum('aggregate') <= $limit) {
@@ -143,7 +143,7 @@ final class ExportBuilder
         return $path;
     }
 
-    private function store(object $export, string $path, string $writerType): string
+    private function store(ExcelExport $export, string $path, string $writerType): string
     {
         Excel::store($export, $path, $this->diskName(), $writerType);
 
@@ -180,15 +180,23 @@ final class ExportBuilder
     {
         $scope = $export->scope;
 
-        $label = match (ExportScope::tryFrom((string) ($scope['type'] ?? ''))) {
+        $label = match (ExportScope::tryFrom($scope['type'])) {
             ExportScope::Route => 'route-'.($scope['scrape_target_id'] ?? ''),
             ExportScope::All => 'all-sites',
-            default => $export->scrapeJob?->discovery?->site?->domain ?? 'job-'.$export->scrape_job_id,
+            default => $export->scrapeJob->discovery->site->domain ?? 'job-'.$export->scrape_job_id,
         };
 
         $suffix = $export->format === ExportFormat::ZipImages ? '-images' : ($export->format === ExportFormat::XlsxImages ? '-with-images' : '');
 
-        return 'catalogix-'.Str::slug($label).$suffix.'-'.now()->format('Ymd-His').'-'.$export->id;
+        return 'catalogix-'.$this->fileSafe($label).$suffix.'-'.now()->format('Ymd-His').'-'.$export->id;
+    }
+
+    /**
+     * Keep domains readable in file names ("chaldal.com"), replacing anything else unsafe.
+     */
+    private function fileSafe(string $value): string
+    {
+        return trim((string) preg_replace('/[^a-z0-9.-]+/', '-', strtolower($value)), '-.') ?: 'export';
     }
 
     private function diskName(): string

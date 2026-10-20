@@ -19,7 +19,7 @@ final class ExportProductQuery
     public function for(Export $export): Builder
     {
         $scope = $export->scope;
-        $type = ExportScope::tryFrom((string) ($scope['type'] ?? '')) ?? ExportScope::Site;
+        $type = ExportScope::tryFrom($scope['type']) ?? ExportScope::Site;
 
         $query = Product::query()->with(['site', 'category', 'image']);
 

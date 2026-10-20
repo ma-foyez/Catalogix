@@ -9,8 +9,32 @@
 (function () {
     'use strict';
 
-    var UNSTABLE = ['active', 'selected', 'hover', 'focus', 'show', 'open', 'lazy', 'loaded', 'loading', 'visible', 'hidden', 'first', 'last', 'odd', 'even', 'current'];
-    var COLORS = { name: '#2563eb', price: '#16a34a', sale_price: '#0d9488', image: '#d97706', next: '#9333ea', card: '#e11d48' };
+    var UNSTABLE = [
+        'active',
+        'selected',
+        'hover',
+        'focus',
+        'show',
+        'open',
+        'lazy',
+        'loaded',
+        'loading',
+        'visible',
+        'hidden',
+        'first',
+        'last',
+        'odd',
+        'even',
+        'current',
+    ];
+    var COLORS = {
+        name: '#2563eb',
+        price: '#16a34a',
+        sale_price: '#0d9488',
+        image: '#d97706',
+        next: '#9333ea',
+        card: '#e11d48',
+    };
 
     var currentField = null;
     var picked = {};
@@ -33,9 +57,12 @@
     function stableClasses(el) {
         return Array.prototype.filter
             .call(el.classList, function (c) {
-                if (!/^[a-zA-Z_][\w-]{1,40}$/.test(c) || /\d{3,}/.test(c)) return false;
+                if (!/^[a-zA-Z_][\w-]{1,40}$/.test(c) || /\d{3,}/.test(c))
+                    return false;
                 var lower = c.toLowerCase();
-                return !UNSTABLE.some(function (w) { return lower.indexOf(w) !== -1; });
+                return !UNSTABLE.some(function (w) {
+                    return lower.indexOf(w) !== -1;
+                });
             })
             .sort()
             .slice(0, 2);
@@ -43,13 +70,26 @@
 
     function segment(el) {
         var classes = stableClasses(el);
-        return el.tagName.toLowerCase() + (classes.length ? '.' + classes.join('.') : '');
+        return (
+            el.tagName.toLowerCase() +
+            (classes.length ? '.' + classes.join('.') : '')
+        );
     }
 
     function absolutePath(el) {
         var parts = [];
-        while (el && el.nodeType === 1 && el !== document.body && el !== document.documentElement && parts.length < 6) {
-            if (el.id && /^[a-zA-Z][\w-]{0,60}$/.test(el.id) && !/\d{3,}/.test(el.id)) {
+        while (
+            el &&
+            el.nodeType === 1 &&
+            el !== document.body &&
+            el !== document.documentElement &&
+            parts.length < 6
+        ) {
+            if (
+                el.id &&
+                /^[a-zA-Z][\w-]{0,60}$/.test(el.id) &&
+                !/\d{3,}/.test(el.id)
+            ) {
                 parts.unshift('#' + el.id);
                 break;
             }
@@ -64,7 +104,8 @@
         var parts = [];
         var node = el;
         while (node && node !== ancestor && parts.length < 4) {
-            if (node === el || stableClasses(node).length) parts.unshift(segment(node));
+            if (node === el || stableClasses(node).length)
+                parts.unshift(segment(node));
             node = node.parentElement;
         }
         return parts.join(' ');
@@ -74,7 +115,12 @@
         var first = elements[0];
         var node = first;
         while (node) {
-            if (elements.every(function (e) { return node.contains(e); })) return node;
+            if (
+                elements.every(function (e) {
+                    return node.contains(e);
+                })
+            )
+                return node;
             node = node.parentElement;
         }
         return document.body;
@@ -83,7 +129,12 @@
     function sameSignatureSiblings(el) {
         if (!el.parentElement) return [];
         var sig = segment(el);
-        return Array.prototype.filter.call(el.parentElement.children, function (c) { return segment(c) === sig; });
+        return Array.prototype.filter.call(
+            el.parentElement.children,
+            function (c) {
+                return segment(c) === sig;
+            },
+        );
     }
 
     function findCard(elements) {
@@ -96,7 +147,9 @@
     }
 
     function clearMarks(attribute) {
-        document.querySelectorAll('[' + attribute + ']').forEach(function (e) { e.removeAttribute(attribute); });
+        document.querySelectorAll('[' + attribute + ']').forEach(function (e) {
+            e.removeAttribute(attribute);
+        });
     }
 
     function describe(el) {
@@ -104,91 +157,141 @@
         var anchor = el.closest('a') || el.querySelector('a');
         return {
             text: (el.innerText || el.textContent || '').trim().slice(0, 160),
-            src: img ? img.getAttribute('data-src') || img.currentSrc || img.src : null,
+            src: img
+                ? img.getAttribute('data-src') || img.currentSrc || img.src
+                : null,
             href: anchor ? anchor.href : null,
         };
     }
 
     function build() {
         var examples = ['name', 'price', 'image']
-            .map(function (f) { return picked[f]; })
+            .map(function (f) {
+                return picked[f];
+            })
             .filter(Boolean);
 
         if (examples.length < 2) {
-            send({ type: 'catalogix:error', message: 'Pick at least a name and a price first.' });
+            send({
+                type: 'catalogix:error',
+                message: 'Pick at least a name and a price first.',
+            });
             return;
         }
 
         var card = findCard(examples);
 
         if (!card) {
-            send({ type: 'catalogix:error', message: 'Could not find a repeated product card around your picks. Try picking inside one product box.' });
+            send({
+                type: 'catalogix:error',
+                message:
+                    'Could not find a repeated product card around your picks. Try picking inside one product box.',
+            });
             return;
         }
 
         var signature = segment(card);
         var siblings = sameSignatureSiblings(card);
-        var cardSelector = document.querySelectorAll(signature).length === siblings.length
-            ? signature
-            : absolutePath(card.parentElement) + ' > ' + signature;
+        var cardSelector =
+            document.querySelectorAll(signature).length === siblings.length
+                ? signature
+                : absolutePath(card.parentElement) + ' > ' + signature;
 
         var selectors = {
             card: cardSelector,
             name: picked.name ? relativePath(picked.name, card) : null,
             price: picked.price ? relativePath(picked.price, card) : null,
-            sale_price: picked.sale_price && card.contains(picked.sale_price) ? relativePath(picked.sale_price, card) : null,
+            sale_price:
+                picked.sale_price && card.contains(picked.sale_price)
+                    ? relativePath(picked.sale_price, card)
+                    : null,
             image: picked.image ? relativePath(picked.image, card) : null,
             link: null,
             next: picked.next ? absolutePath(picked.next) : null,
         };
 
         highlight(cardSelector);
-        send({ type: 'catalogix:recipe', selectors: selectors, count: document.querySelectorAll(cardSelector).length });
+        send({
+            type: 'catalogix:recipe',
+            selectors: selectors,
+            count: document.querySelectorAll(cardSelector).length,
+        });
     }
 
     function highlight(selector) {
         clearMarks('data-cx-match');
         try {
-            document.querySelectorAll(selector).forEach(function (e) { e.setAttribute('data-cx-match', ''); });
+            document.querySelectorAll(selector).forEach(function (e) {
+                e.setAttribute('data-cx-match', '');
+            });
         } catch (e) {
-            send({ type: 'catalogix:error', message: 'That selector is not valid CSS.' });
+            send({
+                type: 'catalogix:error',
+                message: 'That selector is not valid CSS.',
+            });
         }
     }
 
-    document.addEventListener('mouseover', function (event) {
-        if (!currentField) return;
-        if (hovered) hovered.removeAttribute('data-cx-hover');
-        hovered = event.target;
-        hovered.setAttribute('data-cx-hover', '');
-    }, true);
+    document.addEventListener(
+        'mouseover',
+        function (event) {
+            if (!currentField) return;
+            if (hovered) hovered.removeAttribute('data-cx-hover');
+            hovered = event.target;
+            hovered.setAttribute('data-cx-hover', '');
+        },
+        true,
+    );
 
-    document.addEventListener('click', function (event) {
-        event.preventDefault();
-        event.stopPropagation();
+    document.addEventListener(
+        'click',
+        function (event) {
+            event.preventDefault();
+            event.stopPropagation();
 
-        if (!currentField) return;
+            if (!currentField) return;
 
-        var el = event.target;
+            var el = event.target;
 
-        if (currentField === 'image' && el.tagName !== 'IMG') {
-            el = el.querySelector('img') || (el.closest('a') && el.closest('a').querySelector('img')) || el;
-        }
+            if (currentField === 'image' && el.tagName !== 'IMG') {
+                el =
+                    el.querySelector('img') ||
+                    (el.closest('a') && el.closest('a').querySelector('img')) ||
+                    el;
+            }
 
-        if (currentField === 'next') {
-            el = el.closest('a') || el;
-        }
+            if (currentField === 'next') {
+                el = el.closest('a') || el;
+            }
 
-        if (picked[currentField]) picked[currentField].removeAttribute('data-cx-picked');
-        picked[currentField] = el;
-        el.setAttribute('data-cx-picked', '');
-        el.style.setProperty('--cx-color', COLORS[currentField] || '#2563eb');
+            if (picked[currentField])
+                picked[currentField].removeAttribute('data-cx-picked');
+            picked[currentField] = el;
+            el.setAttribute('data-cx-picked', '');
+            el.style.setProperty(
+                '--cx-color',
+                COLORS[currentField] || '#2563eb',
+            );
 
-        send({ type: 'catalogix:picked', field: currentField, path: absolutePath(el), sample: describe(el) });
-        currentField = null;
-        if (hovered) hovered.removeAttribute('data-cx-hover');
-    }, true);
+            send({
+                type: 'catalogix:picked',
+                field: currentField,
+                path: absolutePath(el),
+                sample: describe(el),
+            });
+            currentField = null;
+            if (hovered) hovered.removeAttribute('data-cx-hover');
+        },
+        true,
+    );
 
-    document.addEventListener('submit', function (event) { event.preventDefault(); }, true);
+    document.addEventListener(
+        'submit',
+        function (event) {
+            event.preventDefault();
+        },
+        true,
+    );
 
     window.addEventListener('message', function (event) {
         var data = event.data || {};

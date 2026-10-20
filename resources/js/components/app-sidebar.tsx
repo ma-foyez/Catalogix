@@ -1,7 +1,6 @@
-import { Link } from '@inertiajs/react';
-import { BookOpen, FolderGit2, LayoutGrid } from 'lucide-react';
+import { Link, usePage } from '@inertiajs/react';
+import { FileDown, Globe, History, Radar } from 'lucide-react';
 import AppLogo from '@/components/app-logo';
-import { NavFooter } from '@/components/nav-footer';
 import { NavMain } from '@/components/nav-main';
 import { NavUser } from '@/components/nav-user';
 import {
@@ -13,38 +12,32 @@ import {
     SidebarMenuButton,
     SidebarMenuItem,
 } from '@/components/ui/sidebar';
-import { dashboard } from '@/routes';
-import type { NavItem } from '@/types';
+import { discover } from '@/routes';
+import { index as exportsIndex } from '@/routes/exports';
+import { index as jobsIndex } from '@/routes/jobs';
+import { index as sitesIndex } from '@/routes/sites';
+import type { Auth, NavItem } from '@/types';
 
 const mainNavItems: NavItem[] = [
-    {
-        title: 'Dashboard',
-        href: dashboard(),
-        icon: LayoutGrid,
-    },
+    { title: 'Discover', href: discover(), icon: Radar },
+    { title: 'History', href: jobsIndex(), icon: History },
+    { title: 'Exports', href: exportsIndex(), icon: FileDown },
 ];
 
-const footerNavItems: NavItem[] = [
-    {
-        title: 'Repository',
-        href: 'https://github.com/laravel/react-starter-kit',
-        icon: FolderGit2,
-    },
-    {
-        title: 'Documentation',
-        href: 'https://laravel.com/docs/starter-kits#react',
-        icon: BookOpen,
-    },
+const adminNavItems: NavItem[] = [
+    { title: 'Sites & recipes', href: sitesIndex(), icon: Globe },
 ];
 
 export function AppSidebar() {
+    const { auth } = usePage<{ auth: Auth }>().props;
+
     return (
         <Sidebar collapsible="icon" variant="inset">
             <SidebarHeader>
                 <SidebarMenu>
                     <SidebarMenuItem>
                         <SidebarMenuButton size="lg" asChild>
-                            <Link href={dashboard()} prefetch>
+                            <Link href={discover()} prefetch>
                                 <AppLogo />
                             </Link>
                         </SidebarMenuButton>
@@ -53,11 +46,13 @@ export function AppSidebar() {
             </SidebarHeader>
 
             <SidebarContent>
-                <NavMain items={mainNavItems} />
+                <NavMain items={mainNavItems} label="Catalogue" />
+                {auth.user.is_admin === true && (
+                    <NavMain items={adminNavItems} label="Admin" />
+                )}
             </SidebarContent>
 
             <SidebarFooter>
-                <NavFooter items={footerNavItems} className="mt-auto" />
                 <NavUser />
             </SidebarFooter>
         </Sidebar>

@@ -71,7 +71,7 @@ final class RouteProber
         }
 
         $count = count($best);
-        $images = array_values(array_slice(array_filter(array_column($best, 'image_url')), 0, 3));
+        $images = array_slice(array_values(array_filter(array_column($best, 'image_url'))), 0, 3);
         $estimate = max($count, $this->advertisedCount($html));
 
         return new ProbeResult(
@@ -117,7 +117,8 @@ final class RouteProber
      */
     private function advertisedCount(string $html): int
     {
-        $text = strip_tags(preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', ' ', $html) ?? '');
+        // preg_replace gives null when a huge page exceeds PCRE limits; counting script text then is harmless.
+        $text = strip_tags(preg_replace('#<(script|style)\b[^>]*>.*?</\1>#is', ' ', $html) ?? $html);
 
         if (preg_match_all('/(?:of\s+)?([0-9০-৯][0-9০-৯,]*)\s+(?:products|items|results|পণ্য)/iu', $text, $matches)) {
             $numbers = array_map(fn (string $n) => (int) str_replace(',', '', PriceParser::toAsciiDigits($n)), $matches[1]);

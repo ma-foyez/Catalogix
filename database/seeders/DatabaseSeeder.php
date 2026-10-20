@@ -11,15 +11,18 @@ class DatabaseSeeder extends Seeder
     use WithoutModelEvents;
 
     /**
-     * Seed the application's database.
+     * An admin (sites and the visual recipe picker) and a regular user. Change both passwords outside local development.
      */
     public function run(): void
     {
-        // User::factory(10)->create();
+        User::factory()->admin()->create([
+            'name' => 'Catalogix Admin',
+            'email' => 'admin@catalogix.test',
+        ]);
 
         User::factory()->create([
-            'name' => 'Test User',
-            'email' => 'test@example.com',
+            'name' => 'Demo User',
+            'email' => 'user@catalogix.test',
         ]);
     }
 }

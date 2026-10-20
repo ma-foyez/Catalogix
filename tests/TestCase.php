@@ -13,6 +13,8 @@ abstract class TestCase extends BaseTestCase
     {
         parent::setUp();
 
+        $this->withoutVite();
+
         // No test may reach a real website or launch the Python helper.
         Http::preventStrayRequests();
         Process::preventStrayProcesses();

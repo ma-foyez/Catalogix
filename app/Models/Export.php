@@ -5,17 +5,17 @@ namespace App\Models;
 use App\Enums\ExportFormat;
 use App\Enums\ExportLayout;
 use App\Enums\ExportStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
-use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\URL;
 
 /**
  * @property int $id
  * @property int $user_id
  * @property int|null $scrape_job_id
- * @property array{type: string, scrape_job_id?: int, scrape_target_id?: int, product_ids?: list<int>} $scope
+ * @property array{type: string, scrape_job_id?: int, scrape_target_id?: int, category_id?: int} $scope
  * @property ExportFormat $format
  * @property ExportLayout $layout
  * @property string|null $file_path
@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\URL;
  * @property int $row_count
  * @property ExportStatus $status
  * @property string|null $error
- * @property Carbon|null $expires_at
+ * @property CarbonImmutable|null $expires_at
  */
 #[Fillable([
     'user_id', 'scrape_job_id', 'scope', 'format', 'layout', 'file_path', 'bytes',

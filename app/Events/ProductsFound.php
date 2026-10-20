@@ -12,7 +12,7 @@ class ProductsFound implements ShouldBroadcastNow
     use Dispatchable, InteractsWithSockets;
 
     /**
-     * @param  list<array<string, mixed>>  $products
+     * @param  array<int, mixed>  $products  ProductResource payloads
      */
     public function __construct(
         public int $scrapeJobId,

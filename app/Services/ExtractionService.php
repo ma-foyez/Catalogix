@@ -66,7 +66,11 @@ final class ExtractionService
     {
         $discovery = $job->discovery ?? throw new InvalidArgumentException('This job has no discovery to re-run.');
 
-        $routeIds = $job->targets()->whereNotNull('discovered_route_id')->pluck('discovered_route_id')->all();
+        $routeIds = array_values($job->targets()
+            ->whereNotNull('discovered_route_id')
+            ->pluck('discovered_route_id')
+            ->map(fn ($id) => (int) $id)
+            ->all());
 
         return $this->start($job->user, $discovery, $routeIds);
     }
@@ -76,7 +80,7 @@ final class ExtractionService
      */
     public function retryImages(ScrapeJob $job): int
     {
-        $domain = $job->discovery?->site?->domain ?? 'unknown';
+        $domain = $job->discovery->site->domain ?? 'unknown';
 
         $images = ProductImage::query()
             ->where('status', ImageStatus::Failed)

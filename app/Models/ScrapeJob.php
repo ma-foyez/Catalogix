@@ -4,12 +4,13 @@ namespace App\Models;
 
 use App\Enums\JobStatus;
 use App\Enums\TargetStatus;
+use Carbon\CarbonImmutable;
+use Database\Factories\ScrapeJobFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -19,8 +20,8 @@ use Illuminate\Support\Carbon;
  * @property int $total_routes
  * @property int $total_products
  * @property int $total_images
- * @property Carbon|null $started_at
- * @property Carbon|null $finished_at
+ * @property CarbonImmutable|null $started_at
+ * @property CarbonImmutable|null $finished_at
  * @property-read Discovery|null $discovery
  */
 #[Fillable([
@@ -29,6 +30,7 @@ use Illuminate\Support\Carbon;
 ])]
 class ScrapeJob extends Model
 {
+    /** @use HasFactory<ScrapeJobFactory> */
     use HasFactory;
 
     protected function casts(): array

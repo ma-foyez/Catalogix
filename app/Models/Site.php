@@ -4,12 +4,12 @@ namespace App\Models;
 
 use App\Enums\ExtractionStrategy;
 use App\Enums\Platform;
+use Carbon\CarbonImmutable;
 use Database\Factories\SiteFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\HasMany;
-use Illuminate\Support\Carbon;
 
 /**
  * @property int $id
@@ -23,7 +23,7 @@ use Illuminate\Support\Carbon;
  * @property bool $recipe_valid
  * @property bool $is_blocked
  * @property string|null $blocked_reason
- * @property Carbon|null $last_success_at
+ * @property CarbonImmutable|null $last_success_at
  */
 #[Fillable([
     'domain', 'name', 'platform', 'needs_js', 'strategy', 'selectors', 'pagination',

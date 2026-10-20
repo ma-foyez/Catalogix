@@ -197,6 +197,7 @@ final class JsonProductFinder
 
     /**
      * @param  array<string, mixed>  $item
+     * @return string|array<mixed>|null
      */
     private function imageFrom(array $item): string|array|null
     {

@@ -16,12 +16,12 @@ class DashboardTest extends TestCase
         $response->assertRedirect(route('login'));
     }
 
-    public function test_authenticated_users_can_visit_the_dashboard()
+    public function test_authenticated_users_land_on_discover()
     {
         $user = User::factory()->create();
         $this->actingAs($user);
 
-        $response = $this->get(route('dashboard'));
-        $response->assertOk();
+        $this->get(route('dashboard'))->assertRedirect('/discover');
+        $this->get('/discover')->assertOk();
     }
 }
