@@ -13,6 +13,7 @@ use App\Models\ProductImage;
 use App\Models\ScrapeJob;
 use App\Models\User;
 use App\Services\Crawling\UrlTools;
+use App\Support\CollectionConfiguration;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -39,7 +40,10 @@ final class ExtractionService
                 'user_id' => $user->id,
                 'discovery_id' => $discovery->id,
                 'status' => JobStatus::Queued,
-                'max_products' => $maxProducts ?? $discovery->max_products,
+                'max_products' => CollectionConfiguration::maximum($user, $maxProducts ?? $discovery->max_products),
+                'min_products' => $discovery->min_products,
+                'max_pages' => $discovery->max_pages,
+                'max_routes' => $discovery->max_routes,
                 'total_routes' => $routes->count(),
             ]);
 
@@ -69,7 +73,7 @@ final class ExtractionService
     public function startRecommended(Discovery $discovery): ?ScrapeJob
     {
         $routes = $discovery->routes()->get();
-        $limit = (int) config('catalogix.auto_extract.max_routes', 25);
+        $limit = min($discovery->max_routes, (int) config('catalogix.auto_extract.max_routes', 25));
 
         $pick = fn (int $minScore, bool $withHome) => $routes
             ->filter(fn (DiscoveredRoute $route) => $route->score >= $minScore && ($withHome || ! UrlTools::isHomePage($route->url)))

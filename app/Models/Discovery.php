@@ -19,6 +19,9 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $site_id
  * @property bool $auto_extract
  * @property int|null $max_products
+ * @property int $min_products
+ * @property int $max_pages
+ * @property int $max_routes
  * @property CarbonImmutable|null $paused_at
  * @property JobStatus $status
  * @property DiscoveryStage $stage
@@ -33,7 +36,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read User $user
  * @property-read ScrapeJob|null $latestJob
  */
-#[Fillable(['user_id', 'site_id', 'auto_extract', 'max_products', 'paused_at', 'status', 'stage', 'candidates', 'probed', 'to_probe', 'routes_found', 'error', 'started_at', 'finished_at'])]
+#[Fillable(['user_id', 'site_id', 'auto_extract', 'max_products', 'min_products', 'max_pages', 'max_routes', 'paused_at', 'status', 'stage', 'candidates', 'probed', 'to_probe', 'routes_found', 'error', 'started_at', 'finished_at'])]
 class Discovery extends Model
 {
     /** @use HasFactory<DiscoveryFactory> */
@@ -42,6 +45,9 @@ class Discovery extends Model
     /** @var array<string, mixed> */
     protected $attributes = [
         'auto_extract' => false,
+        'min_products' => 1,
+        'max_pages' => 30,
+        'max_routes' => 25,
         'stage' => 'waiting',
         'candidates' => 0,
         'probed' => 0,

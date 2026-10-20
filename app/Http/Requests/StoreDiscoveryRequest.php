@@ -3,6 +3,7 @@
 namespace App\Http\Requests;
 
 use App\Support\DomainList;
+use App\Support\CollectionConfiguration;
 use Closure;
 use Illuminate\Contracts\Validation\ValidationRule;
 use Illuminate\Foundation\Http\FormRequest;
@@ -19,12 +20,13 @@ class StoreDiscoveryRequest extends FormRequest
      */
     public function rules(): array
     {
+        $settings = CollectionConfiguration::for($this->user());
         return [
             'domains' => ['required_without:domain', 'nullable'],
             'domains.*' => ['string', 'max:2000'],
             'domain' => ['required_without:domains', 'nullable', 'string', 'max:2000'],
             'auto_extract' => ['nullable', 'boolean'],
-            'max_products' => ['nullable', 'integer', 'min:1', 'max:100000'],
+            'max_products' => ['nullable', 'integer', 'min:'.$settings['min_products'], 'max:'.($settings['max_products'] ?? 100000)],
         ];
     }
 
@@ -52,6 +54,7 @@ class StoreDiscoveryRequest extends FormRequest
 
                 $field = $this->has('domains') ? 'domains' : 'domain';
                 $parsed = $this->parsed();
+                $maxSites = CollectionConfiguration::for($this->user())['max_websites'];
 
                 if ($parsed['invalid'] !== []) {
                     $validator->errors()->add($field, count($parsed['invalid']) === 1
@@ -59,8 +62,8 @@ class StoreDiscoveryRequest extends FormRequest
                         : 'These don\'t look like website addresses: '.implode(', ', $parsed['invalid']).'.');
                 } elseif ($parsed['domains'] === []) {
                     $validator->errors()->add($field, 'Enter at least one website, such as chaldal.com.');
-                } elseif (count($parsed['domains']) > DomainList::MAX) {
-                    $validator->errors()->add($field, 'Add up to '.DomainList::MAX.' websites at a time.');
+                } elseif (count($parsed['domains']) > $maxSites) {
+                    $validator->errors()->add($field, 'Add up to '.$maxSites.' websites at a time. You can change this in Settings → Configuration.');
                 }
             },
         ];

@@ -18,6 +18,8 @@ class ProductResource extends JsonResource
     {
         return [
             'id' => $this->id,
+            'site_id' => $this->site_id,
+            'category_id' => $this->category_id,
             'name' => $this->name,
             'price' => $this->price !== null ? (float) $this->price : null,
             'sale_price' => $this->sale_price !== null ? (float) $this->sale_price : null,
@@ -28,7 +30,7 @@ class ProductResource extends JsonResource
             'discount_percent' => $this->discountPercent(),
             'site' => $this->whenLoaded('site', fn () => $this->site->domain),
             'website_url' => $this->whenLoaded('site', fn () => 'https://'.$this->site->domain),
-            'sources' => $this->whenLoaded('scrapeTargets', fn () => $this->scrapeTargets->map(fn ($target) => [
+            'sources' => $this->whenLoaded('scrapeTargets', fn () => $this->scrapeTargets->unique('url')->map(fn ($target) => [
                 'id' => $target->id,
                 'url' => $target->url,
                 'category' => $target->categoryName(),

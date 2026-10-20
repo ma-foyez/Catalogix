@@ -7,6 +7,8 @@ use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\ScrapeJobController;
 use App\Http\Controllers\SiteController;
+use App\Http\Controllers\ProductController;
+use App\Http\Controllers\CategoryController;
 use Illuminate\Support\Facades\Route;
 use Laravel\Fortify\Features;
 
@@ -19,6 +21,11 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::redirect('dashboard', '/discover')->name('dashboard');
 
     Route::get('discover', [DiscoveryController::class, 'index'])->name('discover');
+    Route::get('products', [ProductController::class, 'index'])->name('products.index');
+    Route::patch('products/{product}', [ProductController::class, 'update'])->name('products.update');
+    Route::get('categories', [CategoryController::class, 'index'])->name('categories.index');
+    Route::post('categories', [CategoryController::class, 'store'])->name('categories.store');
+    Route::patch('categories/{category}', [CategoryController::class, 'update'])->name('categories.update');
     Route::post('discoveries/{discovery}/pause', [CollectionControlController::class, 'pauseDiscovery'])->name('discoveries.pause');
     Route::post('discoveries/{discovery}/resume', [CollectionControlController::class, 'resumeDiscovery'])->name('discoveries.resume');
     Route::post('jobs/{job}/pause', [CollectionControlController::class, 'pauseJob'])->name('jobs.pause');

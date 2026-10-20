@@ -14,6 +14,8 @@ use Illuminate\Support\Str;
  * @property string $name
  * @property string $slug
  * @property string|null $source_url
+ * @property-read int|null $products_count
+ * @property-read Site $site
  */
 #[Fillable(['site_id', 'name', 'slug', 'source_url'])]
 class Category extends Model

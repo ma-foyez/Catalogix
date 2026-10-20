@@ -31,7 +31,8 @@ trait ValidatesProductSelection
             return;
         }
 
-        if ($job === null || ! $this->user()?->can('view', $job)) {
+        $wholeCatalog = $this->input('scope') === 'all' && $job === null && ! $this->has('filters');
+        if (! $wholeCatalog && ($job === null || ! $this->user()?->can('view', $job))) {
             $validator->errors()->add('job_id', 'Choose one of your collections to export selected or filtered products.');
 
             return;
@@ -40,11 +41,18 @@ trait ValidatesProductSelection
         foreach (['product_ids', 'excluded_product_ids'] as $field) {
             $ids = $this->input($field, []);
             $count = Product::query()->whereIn('id', $ids)
-                ->whereHas('scrapeTargets', fn ($query) => $query->where('scrape_job_id', $job->id))->count();
+                ->when($wholeCatalog,
+                    fn ($query) => $query->whereHas('scrapeTargets.scrapeJob', fn ($jobs) => $jobs->where('user_id', $this->user()->id)),
+                    fn ($query) => $query->whereHas('scrapeTargets', fn ($targets) => $targets->where('scrape_job_id', $job->id)))
+                ->count();
 
             if ($count !== count($ids)) {
                 $validator->errors()->add($field, 'Every selected product must belong to this collection.');
             }
+        }
+
+        if ($wholeCatalog) {
+            return;
         }
 
         if ($this->filled('filters.route') && ! $job->targets()->whereKey($this->integer('filters.route'))->exists()) {

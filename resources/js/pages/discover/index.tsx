@@ -40,9 +40,7 @@ import { cn } from '@/lib/utils';
 import { discover } from '@/routes';
 import { show as discoveryShow } from '@/routes/discoveries';
 import { show as jobShow } from '@/routes/jobs';
-import type { Paginated, RunPhase, SiteRun } from '@/types/catalogix';
-
-const MAX_SITES = 20;
+import type { Paginated, RunPhase, SiteRun, CollectionConfiguration } from '@/types/catalogix';
 
 const PHASES: Record<
     RunPhase,
@@ -117,7 +115,7 @@ function readDomains(text: string): { domains: string[]; invalid: string[] } {
  * States: empty, pasting (live preview of what will be added), invalid input, working (live),
  * ready, nothing found, blocked, failed, waiting for the background worker.
  */
-export default function Websites({ runs }: { runs: Paginated<SiteRun> }) {
+export default function Websites({ runs, configuration }: { runs: Paginated<SiteRun>; configuration: CollectionConfiguration }) {
     const { queueStalled } = usePage().props;
     const [text, setText] = useState('');
     const preview = useMemo(() => readDomains(text), [text]);
@@ -202,7 +200,7 @@ export default function Websites({ runs }: { runs: Paginated<SiteRun> }) {
                                                         several on new lines or
                                                         separate them with
                                                         commas (up to{' '}
-                                                        {MAX_SITES}).
+                                                        {configuration.max_websites}).
                                                     </span>
                                                 ) : (
                                                     <>
@@ -258,15 +256,15 @@ export default function Websites({ runs }: { runs: Paginated<SiteRun> }) {
                                             id="max_products"
                                             name="max_products"
                                             type="number"
-                                            min={1}
-                                            max={100000}
+                                            min={configuration.min_products}
+                                            max={configuration.max_products ?? 100000}
                                             step={1}
                                             placeholder="No limit"
+                                            defaultValue={configuration.max_products ?? ''}
                                             className="w-36"
                                         />
                                         <span className="text-xs text-muted-foreground">
-                                            Stops collecting when the limit is
-                                            reached. Leave blank for no limit.
+                                            {configuration.max_products !== null ? `Your configured maximum is ${formatCount(configuration.max_products)} products.` : 'Leave blank for no product cap.'} <Link href="/settings/configuration" className="text-primary hover:underline">Manage defaults</Link>
                                         </span>
                                     </div>
                                     <InputError message={errors.max_products} />

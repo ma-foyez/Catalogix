@@ -92,7 +92,7 @@ export default function Register({ passwordRules }: Props) {
 
                             <Button
                                 type="submit"
-                                className="mt-2 w-full"
+                                className="mt-2 h-11 w-full rounded-xl shadow-sm shadow-primary/20"
                                 tabIndex={5}
                                 data-test="register-user-button"
                             >
@@ -115,6 +115,6 @@ export default function Register({ passwordRules }: Props) {
 }
 
 Register.layout = {
-    title: 'Create an account',
-    description: 'Enter your details below to create your account',
+    title: 'Make it your workspace.',
+    description: 'Create your account and turn your first website into a product catalogue.',
 };

@@ -71,7 +71,8 @@ final class PageProcessor
             return PageOutcome::done($outcome->strategy, $saved);
         }
 
-        $nextUrl = $page < $this->maxPages() ? $this->paginator->next($context, $outcome) : null;
+        $maxPages = min($target->scrapeJob->max_pages, $this->maxPages());
+        $nextUrl = $page < $maxPages ? $this->paginator->next($context, $outcome) : null;
 
         return new PageOutcome(
             status: $nextUrl !== null ? PageOutcome::NEXT : PageOutcome::DONE,

@@ -18,6 +18,9 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property int|null $discovery_id
  * @property JobStatus $status
  * @property int|null $max_products
+ * @property int $min_products
+ * @property int $max_pages
+ * @property int $max_routes
  * @property CarbonImmutable|null $paused_at
  * @property int $total_routes
  * @property int $total_products
@@ -30,12 +33,14 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  */
 #[Fillable([
     'user_id', 'discovery_id', 'status', 'total_routes', 'total_products',
-    'total_images', 'started_at', 'finished_at', 'max_products', 'paused_at',
+    'total_images', 'started_at', 'finished_at', 'max_products', 'min_products', 'max_pages', 'max_routes', 'paused_at',
 ])]
 class ScrapeJob extends Model
 {
     /** @use HasFactory<ScrapeJobFactory> */
     use HasFactory;
+
+    protected $attributes = ['min_products' => 1, 'max_pages' => 30, 'max_routes' => 25];
 
     protected function casts(): array
     {

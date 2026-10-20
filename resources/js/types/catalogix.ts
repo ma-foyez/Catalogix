@@ -120,6 +120,8 @@ export type ScrapeTarget = {
 };
 
 export type ScrapeJob = {
+    min_products: number;
+    below_minimum: boolean;
     paused: boolean;
     max_products: number | null;
     limit_reached: boolean;
@@ -153,6 +155,8 @@ export type ProductImage = {
 
 export type Product = {
     id: number;
+    site_id: number;
+    category_id: number | null;
     name: string;
     price: number | null;
     sale_price: number | null;
@@ -195,6 +199,14 @@ export type ExportSelection = {
     product_ids?: number[];
     excluded_product_ids?: number[];
     filters?: ProductFilters;
+};
+
+export type CollectionConfiguration = {
+    min_products: number;
+    max_products: number | null;
+    max_websites: number;
+    max_routes: number;
+    max_pages: number;
 };
 
 export type ExportFile = {

@@ -32,6 +32,7 @@ class DiscoveryController extends Controller
             ->paginate(15);
 
         return Inertia::render('discover/index', [
+            'configuration' => \App\Support\CollectionConfiguration::for($request->user()),
             'runs' => SiteRunResource::collection($runs),
         ]);
     }

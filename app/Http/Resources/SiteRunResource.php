@@ -123,6 +123,11 @@ class SiteRunResource extends JsonResource
             return ['images', "Saving pictures · {$saved} of {$total}", 80 + (int) round(20 * ($total > 0 ? $saved / $total : 0))];
         }
 
-        return ['ready', $job->limitReached() ? "Product limit reached ({$job->max_products}). Your products are ready." : 'All done — view the products or download the Excel file.', 100];
+        $detail = $job->limitReached() ? "Product limit reached ({$job->max_products}). Your products are ready." : 'All done — view the products or download the Excel file.';
+        if ($job->total_products < $job->min_products) {
+            $detail = "Found {$job->total_products} products, below your target of {$job->min_products}. All available results are saved.";
+        }
+
+        return ['ready', $detail, 100];
     }
 }

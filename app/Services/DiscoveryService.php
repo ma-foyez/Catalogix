@@ -9,6 +9,7 @@ use App\Models\Discovery;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Crawling\UrlTools;
+use App\Support\CollectionConfiguration;
 use InvalidArgumentException;
 
 final class DiscoveryService
@@ -19,12 +20,16 @@ final class DiscoveryService
     public function start(User $user, string $input, bool $autoExtract = false, ?int $maxProducts = null): Discovery
     {
         $domain = UrlTools::domainFromInput($input) ?? throw new InvalidArgumentException('Enter a domain such as chaldal.com.');
+        $settings = CollectionConfiguration::for($user);
 
         $discovery = Discovery::create([
             'user_id' => $user->id,
             'site_id' => Site::forHost($domain)->id,
             'auto_extract' => $autoExtract,
-            'max_products' => $maxProducts,
+            'max_products' => CollectionConfiguration::maximum($user, $maxProducts),
+            'min_products' => $settings['min_products'],
+            'max_routes' => $settings['max_routes'],
+            'max_pages' => $settings['max_pages'],
             'status' => JobStatus::Queued,
         ]);
 

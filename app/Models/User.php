@@ -20,6 +20,7 @@ use Laravel\Sanctum\HasApiTokens;
  * @property Carbon|null $email_verified_at
  * @property string $password
  * @property bool $is_admin
+ * @property array{min_products?: int, max_products?: int|null, max_websites?: int, max_routes?: int, max_pages?: int}|null $collection_settings
  * @property string|null $two_factor_secret
  * @property string|null $two_factor_recovery_codes
  * @property Carbon|null $two_factor_confirmed_at
@@ -54,6 +55,7 @@ class User extends Authenticatable
             'email_verified_at' => 'datetime',
             'password' => 'hashed',
             'is_admin' => 'boolean',
+            'collection_settings' => 'array',
             'two_factor_confirmed_at' => 'datetime',
         ];
     }

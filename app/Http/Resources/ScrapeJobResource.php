@@ -23,6 +23,8 @@ class ScrapeJobResource extends JsonResource
             'site_id' => $this->discovery?->site_id,
             'status' => $this->status->value,
             'max_products' => $this->max_products,
+            'min_products' => $this->min_products,
+            'below_minimum' => $this->status->isFinished() && $this->total_products < $this->min_products,
             'limit_reached' => $this->limitReached(),
             'paused' => $this->isPaused(),
             'total_routes' => $this->total_routes,

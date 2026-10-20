@@ -416,6 +416,8 @@ export default function JobShow({
                     </p>
                 )}
 
+                {job.below_minimum && <p role="status" className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm">Found {formatCount(job.total_products)} products, below your configured target of {formatCount(job.min_products)}. All available results are saved. You can review the source pages or collect more sections.</p>}
+
                 {problemRoutes.length > 0 && (
                     <Alert>
                         <AlertTriangle />
