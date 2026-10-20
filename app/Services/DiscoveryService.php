@@ -16,19 +16,51 @@ final class DiscoveryService
     /**
      * Start route discovery for whatever the user typed: "chaldal.com", "www.chaldal.com" or a full URL.
      */
-    public function start(User $user, string $input): Discovery
+    public function start(User $user, string $input, bool $autoExtract = false): Discovery
     {
         $domain = UrlTools::domainFromInput($input) ?? throw new InvalidArgumentException('Enter a domain such as chaldal.com.');
 
         $discovery = Discovery::create([
             'user_id' => $user->id,
             'site_id' => Site::forHost($domain)->id,
+            'auto_extract' => $autoExtract,
             'status' => JobStatus::Queued,
         ]);
 
         DiscoverDomainJob::dispatch($discovery->id, $domain);
 
         return $discovery->load('site');
+    }
+
+    /**
+     * Start several sites at once. A site this user is already processing is left alone
+     * instead of being queued twice.
+     *
+     * @param  list<string>  $domains
+     * @return array{started: list<Discovery>, skipped: list<string>}
+     */
+    public function startMany(User $user, array $domains, bool $autoExtract = true): array
+    {
+        $started = [];
+        $skipped = [];
+
+        foreach ($domains as $domain) {
+            $running = $user->discoveries()
+                ->with('latestJob')
+                ->whereHas('site', fn ($query) => $query->where('domain', $domain))
+                ->latest()
+                ->first();
+
+            if ($running?->isActive()) {
+                $skipped[] = $domain;
+
+                continue;
+            }
+
+            $started[] = $this->start($user, $domain, $autoExtract);
+        }
+
+        return ['started' => $started, 'skipped' => $skipped];
     }
 
     public function restart(Discovery $discovery): Discovery

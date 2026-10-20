@@ -12,10 +12,10 @@ enum ExportFormat: string
     public function label(): string
     {
         return match ($this) {
-            self::XlsxImages => 'Excel with images',
-            self::Xlsx => 'Excel without images',
+            self::XlsxImages => 'Excel with pictures',
+            self::Xlsx => 'Excel (picture links)',
             self::Csv => 'CSV',
-            self::ZipImages => 'Images ZIP',
+            self::ZipImages => 'Pictures (ZIP)',
         };
     }
 

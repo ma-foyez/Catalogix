@@ -8,6 +8,7 @@ use App\Events\RoutesDiscovered;
 use App\Http\Resources\DiscoveryResource;
 use App\Models\Discovery;
 use App\Services\Discovery\DomainDiscoverer;
+use App\Services\ExtractionService;
 use App\Support\Live;
 use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -41,12 +42,19 @@ class DiscoverDomainJob implements ShouldQueue
         return [(new WithoutOverlapping('domain:'.$this->domain))->releaseAfter(10)->expireAfter(960)];
     }
 
-    public function handle(DomainDiscoverer $discoverer): void
+    public function handle(DomainDiscoverer $discoverer, ExtractionService $extraction): void
     {
         $discovery = Discovery::with('site')->find($this->discoveryId);
 
-        if ($discovery !== null && ! $discovery->status->isFinished()) {
-            $discoverer->run($discovery);
+        if ($discovery === null || $discovery->status->isFinished()) {
+            return;
+        }
+
+        $discoverer->run($discovery);
+
+        // Sites added from the web app go straight on to extracting the recommended pages.
+        if ($discovery->auto_extract && $discovery->refresh()->status === JobStatus::Done && ! $discovery->scrapeJobs()->where('created_at', '>=', $discovery->started_at)->exists()) {
+            $extraction->startRecommended($discovery);
         }
     }
 

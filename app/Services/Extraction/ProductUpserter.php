@@ -8,7 +8,9 @@ use App\Models\Product;
 use App\Models\ProductImage;
 use App\Models\ScrapeTarget;
 use App\Models\Site;
+use App\Services\Crawling\UrlTools;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 
 /**
  * Saves normalized products in batches of 50 with upsert() on (site_id, hash), links them to the
@@ -36,20 +38,30 @@ final class ProductUpserter
             ->pluck('products.hash')
             ->flip();
 
-        $routeCategory = $target->categoryName();
+        // The home page lists products from everywhere: it never names their category.
+        $isHome = UrlTools::isHomePage($target->url);
+        [$routeCategory, $routeSubcategory] = $isHome ? [null, null] : $this->routeCategories($target);
         $now = now();
         $productIds = [];
         $newForTarget = 0;
 
         foreach (array_chunk($products, self::BATCH) as $batch) {
             $rows = [];
+            $placement = [];
 
             foreach ($batch as $product) {
-                $category = $routeCategory ?? $product['category'] ?? null;
+                $own = $product['category'] ?? null;
+                $category = $routeCategory ?? $own;
+                $subcategory = $routeSubcategory
+                    ?? ($routeCategory !== null && $own !== null && mb_strtolower($own) !== mb_strtolower($routeCategory) ? $own : null);
+                $categoryId = $category !== null ? $this->categoryId($site, $category, $target->url) : null;
+                $placement[$product['hash']] = [$categoryId, $subcategory];
 
                 $rows[] = [
                     'site_id' => $site->id,
-                    'category_id' => $category !== null ? $this->categoryId($site, $category, $target->url) : null,
+                    'category_id' => $categoryId,
+                    'subcategory' => $subcategory,
+                    'description' => $product['description'] ?? null,
                     'hash' => $product['hash'],
                     'name' => $product['name'],
                     'price' => $product['price'],
@@ -74,13 +86,23 @@ final class ProductUpserter
             Product::upsert(
                 $rows,
                 ['site_id', 'hash'],
-                ['category_id', 'name', 'price', 'sale_price', 'currency', 'product_url', 'sku', 'brand', 'in_stock', 'raw', 'last_seen_at', 'updated_at'],
+                ['name', 'price', 'sale_price', 'currency', 'product_url', 'sku', 'brand', 'description', 'in_stock', 'raw', 'last_seen_at', 'updated_at'],
             );
 
             $ids = Product::query()
                 ->where('site_id', $site->id)
                 ->whereIn('hash', array_column($batch, 'hash'))
                 ->pluck('id', 'hash');
+
+            if ($isHome) {
+                // Earlier versions labelled home-page products "Home"; that is not a category.
+                Product::query()
+                    ->whereIn('id', $ids->values())
+                    ->whereIn('category_id', Category::query()->where('site_id', $site->id)->where('slug', 'home')->select('id'))
+                    ->update(['category_id' => null]);
+            }
+
+            $this->place($ids->all(), $placement, $isHome);
 
             DB::table('product_scrape_target')->insertOrIgnore(
                 $ids->values()->map(fn (int $id) => ['product_id' => $id, 'scrape_target_id' => $target->id])->all(),
@@ -130,6 +152,57 @@ final class ProductUpserter
         if ($rows !== []) {
             DB::table('product_images')->insertOrIgnore($rows);
         }
+    }
+
+    /**
+     * Category pages set a product's category and subcategory; the home page only fills in
+     * products that have none yet.
+     *
+     * @param  array<string, int>  $idsByHash
+     * @param  array<string, array{0: int|null, 1: string|null}>  $placement
+     */
+    private function place(array $idsByHash, array $placement, bool $isHome): void
+    {
+        $groups = [];
+
+        foreach ($placement as $hash => [$categoryId, $subcategory]) {
+            if ($categoryId !== null && isset($idsByHash[$hash])) {
+                $groups[$categoryId.'|'.$subcategory][] = $idsByHash[$hash];
+            }
+        }
+
+        foreach ($groups as $key => $productIds) {
+            [$categoryId, $subcategory] = explode('|', (string) $key, 2);
+
+            Product::query()
+                ->whereIn('id', $productIds)
+                ->when($isHome, fn ($query) => $query->whereNull('category_id'))
+                ->update(['category_id' => (int) $categoryId, 'subcategory' => $subcategory !== '' ? $subcategory : null]);
+        }
+    }
+
+    /**
+     * "/product-category/furniture/chairs/" → ["Furniture", "Chairs"]; a one-level route keeps
+     * its own name and no subcategory.
+     *
+     * @return array{0: string|null, 1: string|null}
+     */
+    private function routeCategories(ScrapeTarget $target): array
+    {
+        $name = $target->categoryName();
+        $path = (string) parse_url($target->url, PHP_URL_PATH);
+        $generic = ['category', 'categories', 'product-category', 'collections', 'collection', 'shop', 'c', 'catalog', 'department', 'products', 'page'];
+
+        $segments = array_values(array_filter(
+            explode('/', trim($path, '/')),
+            fn (string $segment) => $segment !== '' && ! ctype_digit($segment) && ! in_array(strtolower($segment), $generic, true),
+        ));
+
+        if (count($segments) >= 2) {
+            return [Str::headline(urldecode($segments[count($segments) - 2])), $name ?? Str::headline(urldecode(end($segments)))];
+        }
+
+        return [$name, null];
     }
 
     private function categoryId(Site $site, string $name, string $sourceUrl): int

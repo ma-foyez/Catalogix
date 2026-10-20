@@ -15,7 +15,7 @@ final class QueueHealth
     public const array QUEUES = ['discovery', 'pages', 'images', 'exports'];
 
     /** Command shown to the user when nothing is listening. */
-    public const string WORKER_COMMAND = 'php artisan queue:work --queue=discovery,pages,images,exports,default --timeout=960';
+    public const string WORKER_COMMAND = 'php artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960';
 
     private const string SEEN_KEY = 'catalogix:queue-seen:';
 

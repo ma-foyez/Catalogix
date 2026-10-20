@@ -483,7 +483,7 @@ function RouteSkeleton() {
 
 DiscoverShow.layout = {
     breadcrumbs: [
-        { title: 'Discover', href: discover() },
+        { title: 'Websites', href: discover() },
         { title: 'Routes', href: '#' },
     ],
 };

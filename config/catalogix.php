@@ -35,6 +35,11 @@ return [
     |--------------------------------------------------------------------------
     */
 
+    // Sites added from the web app extract their recommended pages on their own, up to this many.
+    'auto_extract' => [
+        'max_routes' => (int) env('CATALOGIX_AUTO_MAX_ROUTES', 25),
+    ],
+
     'discovery' => [
         'menu_depth' => 2,
         'max_sitemap_urls' => 5000,

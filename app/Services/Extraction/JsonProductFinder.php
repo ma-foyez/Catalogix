@@ -111,6 +111,7 @@ final class JsonProductFinder
             'brand' => $this->firstString($item, ['brand', 'brandName', 'brand_name', 'vendor', 'manufacturer']),
             'in_stock' => $this->stockFrom($item),
             'category' => $this->firstString($item, ['category', 'categoryName', 'category_name', 'product_type']),
+            'description' => $this->firstString($item, ['short_description', 'shortDescription', 'description', 'summary']),
             'currency' => $this->firstString($item, ['currency', 'currencyCode', 'currency_code', 'priceCurrency']),
         ], fn ($value) => $value !== null);
     }

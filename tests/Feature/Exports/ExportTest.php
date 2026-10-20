@@ -113,10 +113,29 @@ it('puts a thumbnail picture in every row of an Excel export with images', funct
 
     $anchors = collect($sheet->getDrawingCollection())->map(fn ($drawing) => $drawing->getCoordinates())->all();
 
-    expect($sheet->getCell('A1')->getValue())->toBe('Image')
-        ->and($sheet->getCell('J1')->getValue())->toBe('Source')
+    $headings = array_values(array_filter($sheet->rangeToArray('A1:Z1')[0]));
+
+    expect($headings)->toBe([
+        'Picture', 'Name', 'SKU', 'Brand', 'Category', 'Subcategory', 'Price (৳)', 'Sale price (৳)',
+        'Discount', 'Stock', 'Description', 'Product link', 'Website',
+    ])
         ->and($anchors)->toBe(['A2', 'A3', 'A4', 'A5'])
-        ->and($sheet->getRowDimension(2)->getRowHeight())->toEqual(60.0);
+        ->and($sheet->getRowDimension(2)->getRowHeight())->toEqual(77.5)
+        // Row 3 is product 2: ৳160 on sale for ৳150.
+        ->and($sheet->getCell('I3')->getValue())->toBe('6%')
+        ->and($sheet->getCell('L3')->getHyperlink()->getUrl())->toBe('https://chaldal.com/p/rice-2');
+});
+
+it('lists picture links only in files that cannot hold the pictures', function () {
+    $job = jobWithProducts($this->user, 'chaldal.com', 1);
+
+    $export = runExport($this->user, ['scope' => 'site', 'job_id' => $job->id, 'format' => 'xlsx', 'layout' => 'single']);
+    $sheet = IOFactory::load(Storage::disk('local')->path($export->file_path))->getSheet(0);
+    $headings = array_values(array_filter($sheet->rangeToArray('A1:Z1')[0]));
+
+    expect($headings)->toContain('Image link')
+        ->and($headings)->toContain('Local image path')
+        ->and($headings)->not->toContain('Picture');
 });
 
 it('splits Excel-with-images exports above the row limit into a ZIP of files', function () {
@@ -191,4 +210,24 @@ it('remembers the layout choice', function () {
 
     expect($export->layout)->toBe(ExportLayout::Single)
         ->and(ScrapeTarget::count())->toBe(1);
+});
+
+it('makes a one-click Excel with pictures and reports when it can be downloaded', function () {
+    $job = jobWithProducts($this->user, 'chaldal.com', 2);
+
+    $this->actingAs($this->user)
+        ->postJson(route('jobs.excel', $job))
+        ->assertAccepted()
+        ->assertJsonPath('data.format', 'xlsx_images')
+        ->assertJsonPath('data.layout', 'single');
+
+    runQueuedJobs(ExportProductsJob::class, 1);
+
+    $this->getJson(route('exports.status', Export::sole()))
+        ->assertOk()
+        ->assertJsonPath('data.status', 'ready')
+        ->assertJsonPath('data.download_url', fn (string $url) => str_contains($url, 'signature='));
+
+    $this->actingAs(User::factory()->create())->postJson(route('jobs.excel', $job))->assertForbidden();
+    $this->getJson(route('exports.status', Export::sole()))->assertForbidden();
 });

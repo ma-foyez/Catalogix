@@ -2,10 +2,15 @@
 
 namespace App\Http\Controllers;
 
+use App\Enums\ExportFormat;
+use App\Enums\ExportLayout;
+use App\Enums\ExportScope;
 use App\Http\Requests\StoreExportRequest;
 use App\Http\Resources\ExportResource;
 use App\Models\Export;
+use App\Models\ScrapeJob;
 use App\Services\ExportService;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -32,6 +37,31 @@ class ExportController extends Controller
         Inertia::flash('toast', ['type' => 'success', 'message' => 'Export started. It will appear under Exports when ready.']);
 
         return back();
+    }
+
+    /**
+     * One click from a site card or the products page: Excel with pictures, one sheet. The page
+     * then polls status() and downloads the file as soon as it is ready.
+     */
+    public function quick(Request $request, ScrapeJob $job, ExportService $exports): JsonResponse
+    {
+        Gate::authorize('view', $job);
+
+        $export = $exports->create($request->user(), [
+            'scope' => ExportScope::Site->value,
+            'job_id' => $job->id,
+            'format' => ExportFormat::XlsxImages->value,
+            'layout' => ExportLayout::Single->value,
+        ]);
+
+        return (new ExportResource($export))->response()->setStatusCode(202);
+    }
+
+    public function status(Export $export): ExportResource
+    {
+        Gate::authorize('view', $export);
+
+        return new ExportResource($export);
     }
 
     /**

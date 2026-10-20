@@ -25,10 +25,10 @@ import type {
 
 const FORMAT_HELP: Record<ExportFormat, string> = {
     xlsx_images:
-        'Each row carries the 200 px product thumbnail, so the file reads like a catalogue offline. Over 3,000 rows it splits into one file per site or category, delivered as a ZIP.',
-    xlsx: 'Fast and small: every column, image URLs and local paths instead of pictures.',
-    csv: 'One CSV with a Source column, UTF-8 with BOM so Excel shows Bengali text and ৳ correctly.',
-    zip_images: 'The downloaded images in folders per site and category.',
+        'The product picture sits right in each row, next to name, SKU, category, subcategory, prices, stock and description. Over 3,000 products it is split into several files inside one ZIP.',
+    xlsx: 'Smaller file with the same details, but picture links instead of the pictures.',
+    csv: 'Plain text for other software, with picture links. Opens in Excel with Bengali text and ৳ intact.',
+    zip_images: 'Just the pictures, in folders per website and category.',
 };
 
 export function ExportDialog({
@@ -70,22 +70,22 @@ export function ExportDialog({
     return (
         <Dialog open={open} onOpenChange={setOpen}>
             <DialogTrigger asChild>
-                <Button disabled={totalProducts === 0}>
-                    <FileDown /> Export
+                <Button variant="outline" disabled={totalProducts === 0}>
+                    <FileDown /> Other formats
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Export products</DialogTitle>
+                    <DialogTitle>Download in another format</DialogTitle>
                     <DialogDescription>
-                        The file is built in the background; you will find it
-                        under Exports with a download link valid for 24 hours.
+                        The file is prepared in the background and appears under
+                        Downloads, where it can be downloaded for 24 hours.
                     </DialogDescription>
                 </DialogHeader>
 
                 <div className="space-y-5">
                     <div className="space-y-2">
-                        <Label>Scope</Label>
+                        <Label>Which products</Label>
                         <Segmented
                             label="Scope"
                             value={scope}
@@ -93,11 +93,11 @@ export function ExportDialog({
                             options={[
                                 {
                                     value: 'route',
-                                    label: 'This route',
+                                    label: 'This section',
                                     disabled: route === null,
                                 },
                                 { value: 'site', label: domain ?? 'This site' },
-                                { value: 'all', label: 'All sites' },
+                                { value: 'all', label: 'All websites' },
                             ]}
                         />
                         <p className="text-xs text-muted-foreground">
@@ -105,9 +105,9 @@ export function ExportDialog({
                                 route &&
                                 `${route.category ?? route.url} · ${formatCount(route.products_found)} products`}
                             {scope === 'site' &&
-                                `Every route of this job · ${formatCount(totalProducts)} products`}
+                                `Everything collected from this website · ${formatCount(totalProducts)} products`}
                             {scope === 'all' &&
-                                'Every product from all your extractions'}
+                                'Every product from all your websites'}
                         </p>
                     </div>
 
@@ -120,11 +120,11 @@ export function ExportDialog({
                             options={[
                                 {
                                     value: 'xlsx_images',
-                                    label: 'Excel + images',
+                                    label: 'Excel + pictures',
                                 },
-                                { value: 'xlsx', label: 'Excel' },
+                                { value: 'xlsx', label: 'Excel (links)' },
                                 { value: 'csv', label: 'CSV' },
-                                { value: 'zip_images', label: 'Images ZIP' },
+                                { value: 'zip_images', label: 'Pictures ZIP' },
                             ]}
                         />
                         <p className="text-xs text-muted-foreground">
@@ -134,7 +134,7 @@ export function ExportDialog({
 
                     {(format === 'xlsx' || format === 'xlsx_images') && (
                         <div className="space-y-2">
-                            <Label>Layout</Label>
+                            <Label>Sheets</Label>
                             <Segmented
                                 label="Layout"
                                 value={layout}
@@ -142,11 +142,11 @@ export function ExportDialog({
                                 options={[
                                     {
                                         value: 'per_site',
-                                        label: 'Sheet per site',
+                                        label: 'One per website',
                                     },
                                     {
                                         value: 'single',
-                                        label: 'One sheet + Source',
+                                        label: 'All in one sheet',
                                     },
                                 ]}
                             />
@@ -160,7 +160,7 @@ export function ExportDialog({
                     </Button>
                     <Button onClick={submit} disabled={submitting}>
                         {submitting ? <Spinner /> : <FileDown />}
-                        Start export
+                        Prepare file
                     </Button>
                 </DialogFooter>
             </DialogContent>

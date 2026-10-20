@@ -2,10 +2,8 @@
 
 namespace App\Http\Controllers;
 
-use App\Enums\ImageStatus;
 use App\Http\Resources\ProductResource;
 use App\Http\Resources\ScrapeJobResource;
-use App\Models\ProductImage;
 use App\Models\ScrapeJob;
 use App\Services\ExtractionService;
 use App\Services\JobProductsQuery;
@@ -50,7 +48,7 @@ class ScrapeJobController extends Controller
                 'image' => $filters['image'] ?? null,
             ],
             'categories' => $this->categories($job),
-            'imageStats' => $this->imageStats($job),
+            'imageStats' => $job->imageStats(),
             'isAdmin' => (bool) $request->user()->is_admin,
         ]);
     }
@@ -105,25 +103,5 @@ class ScrapeJobController extends Controller
             ->get()
             ->map(fn (stdClass $row) => ['id' => (int) $row->id, 'name' => (string) $row->name, 'count' => (int) $row->product_count])
             ->all());
-    }
-
-    /**
-     * @return array<string, int>
-     */
-    private function imageStats(ScrapeJob $job): array
-    {
-        $counts = ProductImage::query()
-            ->whereHas('product.scrapeTargets', fn ($query) => $query->where('scrape_targets.scrape_job_id', $job->id))
-            ->selectRaw('status, count(*) as aggregate')
-            ->groupBy('status')
-            ->pluck('aggregate', 'status');
-
-        $stats = [];
-
-        foreach (ImageStatus::cases() as $status) {
-            $stats[$status->value] = (int) ($counts[$status->value] ?? 0);
-        }
-
-        return $stats;
     }
 }

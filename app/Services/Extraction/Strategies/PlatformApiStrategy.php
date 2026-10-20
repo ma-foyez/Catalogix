@@ -79,6 +79,7 @@ final class PlatformApiStrategy implements Strategy
                 'sku' => $item['sku'] ?? null,
                 'in_stock' => $item['is_in_stock'] ?? null,
                 'category' => $item['categories'][0]['name'] ?? null,
+                'description' => ($item['short_description'] ?? '') !== '' ? $item['short_description'] : ($item['description'] ?? null),
             ];
         }
 
@@ -117,6 +118,7 @@ final class PlatformApiStrategy implements Strategy
                 'brand' => $item['vendor'] ?? null,
                 'in_stock' => $variant['available'] ?? null,
                 'category' => $item['product_type'] ?? null,
+                'description' => $item['body_html'] ?? null,
             ];
         }
 

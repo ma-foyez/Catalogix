@@ -95,7 +95,8 @@ final class ExtractionLadder
         $products = [];
 
         foreach ($result->products as $raw) {
-            $product = $this->normalizer->normalize($raw, $context->url, $context->category);
+            // Products keep their own category here; ProductUpserter decides how the page's name applies.
+            $product = $this->normalizer->normalize($raw, $context->url);
 
             if ($product !== null && $product['price'] !== null) {
                 $products[$product['hash']] ??= $product;

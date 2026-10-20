@@ -10,6 +10,13 @@ final class UrlTools
     /**
      * Turn whatever the user typed ("chaldal.com", "https://www.chaldal.com/popular") into a bare domain.
      */
+    public static function isHomePage(string $url): bool
+    {
+        $path = parse_url($url, PHP_URL_PATH);
+
+        return (! is_string($path) || trim($path, '/') === '') && parse_url($url, PHP_URL_QUERY) === null;
+    }
+
     public static function domainFromInput(string $input): ?string
     {
         $input = trim($input);

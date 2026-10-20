@@ -22,23 +22,23 @@ import { discover, login, register } from '@/routes';
 const STEPS = [
     {
         icon: Globe,
-        title: 'Type a domain',
-        text: 'Just chaldal.com — no URLs to collect, no selectors to write.',
+        title: 'Paste websites',
+        text: 'One shop or twenty — plain addresses or full links, Catalogix reads them all.',
     },
     {
         icon: Radar,
-        title: 'Review suggested routes',
-        text: 'Sitemaps, the store catalogue and the menu become a scored checklist with sample images.',
+        title: 'It finds the products',
+        text: 'Sitemaps, the store catalogue and the menu point to every page that lists products.',
     },
     {
         icon: Layers,
-        title: 'Extract',
-        text: 'Every ticked route is crawled page by page; products appear live as they are found.',
+        title: 'Collects and saves pictures',
+        text: 'Name, price, sale price, SKU, category and stock — with every picture saved.',
     },
     {
         icon: FileSpreadsheet,
-        title: 'Export',
-        text: 'Excel with pictures in the cells, plain Excel, CSV or a ZIP of images.',
+        title: 'Download Excel',
+        text: 'One click: an Excel file with the product pictures right in the rows.',
     },
 ];
 
@@ -171,8 +171,8 @@ export default function Welcome({
                         <div className="mx-auto max-w-6xl px-4 py-20 md:px-6">
                             <SectionHeading
                                 eyebrow="How it works"
-                                title="From a domain to a spreadsheet in four steps"
-                                text="You only ever type the domain. Catalogix works out where the products are and asks you to confirm."
+                                title="Paste a website. Get an Excel file."
+                                text="No settings and no technical steps — Catalogix does the work and tells you in plain words what it is doing."
                             />
 
                             <ol className="relative mt-12 grid gap-6 md:grid-cols-4">

@@ -16,13 +16,21 @@ use Illuminate\Support\Facades\Gate;
 class DiscoveryController extends Controller
 {
     /**
-     * POST /api/discoveries {domain}: start route discovery.
+     * POST /api/discoveries {domain} or {domains: [...]}: start route discovery. With
+     * auto_extract=true the recommended routes are extracted as soon as discovery finishes.
      */
     public function store(StoreDiscoveryRequest $request, DiscoveryService $discoveries): JsonResponse
     {
-        $discovery = $discoveries->start($request->user(), $request->validated('domain'));
+        $domains = $request->domains();
+        $auto = $request->boolean('auto_extract');
 
-        return (new DiscoveryResource($discovery))->response()->setStatusCode(202);
+        if (count($domains) === 1) {
+            return (new DiscoveryResource($discoveries->start($request->user(), $domains[0], $auto)))->response()->setStatusCode(202);
+        }
+
+        $started = $discoveries->startMany($request->user(), $domains, $auto)['started'];
+
+        return DiscoveryResource::collection($started)->response()->setStatusCode(202);
     }
 
     /**

@@ -2,7 +2,9 @@ import { Head, Link, router, usePage } from '@inertiajs/react';
 import { useEcho } from '@laravel/echo-react';
 import {
     AlertTriangle,
+    ArrowLeft,
     Clock,
+    Download,
     ExternalLink,
     ImageOff,
     PackageSearch,
@@ -16,8 +18,9 @@ import ScrapeJobController from '@/actions/App/Http/Controllers/ScrapeJobControl
 import { EmptyState } from '@/components/empty-state';
 import { ExportDialog } from '@/components/export-dialog';
 import { PaginationLinks } from '@/components/pagination-links';
+import { ProductDetails, StockBadge } from '@/components/product-details';
 import { ProductThumb } from '@/components/product-thumb';
-import { StatusBadge, ToneBadge } from '@/components/status-badge';
+import { StatusBadge } from '@/components/status-badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -38,11 +41,13 @@ import {
     TableHeader,
     TableRow,
 } from '@/components/ui/table';
+import { useExcelDownload } from '@/hooks/use-excel-download';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { useThrottledReload } from '@/hooks/use-throttled-reload';
 import { formatCount, formatTaka } from '@/lib/format';
 import { cn } from '@/lib/utils';
-import { index as jobsIndex, show } from '@/routes/jobs';
+import { discover } from '@/routes';
+import { show } from '@/routes/jobs';
 import { edit as recipeEdit } from '@/routes/sites/recipe';
 import type {
     Paginated,
@@ -72,11 +77,12 @@ const LIVE_PROPS = ['job', 'products', 'categories', 'imageStats'];
 
 /*
  * Design brief
- * User: someone watching an extraction run, then filtering and exporting.
- * Main task: see products arrive per route and export the right slice.
- * Key information: progress per route, product rows with local thumbnail, ৳ price and sale price, category, stock.
- * Primary action: "Export".
- * States: queued/crawling (skeleton rows, live rows), done, partially failed, blocked, empty filter result.
+ * User: someone who collected a shop's products and now wants to look through them or take them away.
+ * Main task: browse products with their pictures and download an Excel file.
+ * Key information: picture, name, SKU/brand, category › subcategory, ৳ price and sale price with
+ * discount, stock; full details of one product on click.
+ * Primary action: "Download Excel" (with pictures, one click).
+ * States: still collecting (live), ready, some sections failed or blocked, empty filter result.
  */
 export default function JobShow({
     job,
@@ -88,7 +94,9 @@ export default function JobShow({
 }: Props) {
     const [rows, setRows] = useState<Product[]>(products.data);
     const [search, setSearch] = useState(filters.search);
+    const [selected, setSelected] = useState<Product | null>(null);
     const reload = useThrottledReload(LIVE_PROPS);
+    const excel = useExcelDownload();
 
     useEffect(() => setRows(products.data), [products]);
 
@@ -115,16 +123,26 @@ export default function JobShow({
     const finished = routes.filter((route) =>
         ['done', 'blocked', 'failed'].includes(route.status),
     ).length;
-    const progress =
-        routes.length > 0 ? Math.round((finished / routes.length) * 100) : 0;
     const running = job.status === 'queued' || job.status === 'running';
     const { queueStalled } = usePage().props;
     const stalled =
         job.status === 'queued' &&
         (queueStalled?.queues.includes('pages') ?? false);
     const crawling = routes.find((route) => route.status === 'crawling');
+    const working = running || imageStats.pending > 0;
+    const imageTotal =
+        imageStats.pending + imageStats.downloaded + imageStats.failed;
+    const progress = running
+        ? 5 + Math.round((routes.length ? finished / routes.length : 0) * 75)
+        : imageTotal > 0
+          ? 80 +
+            Math.round(
+                ((imageStats.downloaded + imageStats.failed) / imageTotal) * 20,
+            )
+          : 100;
 
-    useLivePoll(running || imageStats.pending > 0, LIVE_PROPS, 3000);
+    useLivePoll(working, LIVE_PROPS, 3000);
+
     const activeRoute =
         routes.find((route) => String(route.id) === filters.route) ?? null;
     const problemRoutes = routes.filter(
@@ -163,17 +181,42 @@ export default function JobShow({
 
     return (
         <>
-            <Head title={`Products · ${job.domain ?? 'Job #' + job.id}`} />
+            <Head title={`Products · ${job.domain ?? 'Website'}`} />
 
-            <div className="flex flex-col gap-5 px-4 py-6">
+            <div className="flex flex-col gap-5 px-4 py-6 md:px-6">
+                <Link
+                    href={discover()}
+                    className="flex w-fit items-center gap-1 text-sm text-muted-foreground hover:text-foreground"
+                >
+                    <ArrowLeft className="size-4" /> All websites
+                </Link>
+
                 <header className="space-y-4">
                     <div className="flex flex-wrap items-start justify-between gap-4">
                         <div className="space-y-1">
                             <div className="flex flex-wrap items-center gap-2">
                                 <h1 className="font-mono text-xl font-semibold">
-                                    {job.domain ?? `Job #${job.id}`}
+                                    {job.domain ?? `Website #${job.id}`}
                                 </h1>
-                                <StatusBadge status={job.status} />
+                                {working ? (
+                                    <StatusBadge
+                                        status="running"
+                                        label={
+                                            running
+                                                ? 'Collecting products'
+                                                : 'Saving pictures'
+                                        }
+                                    />
+                                ) : (
+                                    <StatusBadge
+                                        status={job.status}
+                                        label={
+                                            job.status === 'done'
+                                                ? 'Ready'
+                                                : undefined
+                                        }
+                                    />
+                                )}
                             </div>
                             <p className="text-sm text-muted-foreground">
                                 <span className="font-mono text-foreground">
@@ -183,21 +226,14 @@ export default function JobShow({
                                 <span className="font-mono text-foreground">
                                     {formatCount(imageStats.downloaded)}
                                 </span>{' '}
-                                images saved
-                                {imageStats.pending > 0 && (
-                                    <>
-                                        {' '}
-                                        · {formatCount(imageStats.pending)}{' '}
-                                        downloading
-                                    </>
-                                )}
+                                pictures saved
                                 {imageStats.failed > 0 && (
                                     <>
                                         {' '}
                                         ·{' '}
-                                        <span className="text-destructive">
+                                        <span className="text-warning">
                                             {formatCount(imageStats.failed)}{' '}
-                                            failed
+                                            missing
                                         </span>
                                     </>
                                 )}
@@ -205,9 +241,9 @@ export default function JobShow({
                         </div>
 
                         <div className="flex flex-wrap gap-2">
-                            {imageStats.failed > 0 && (
+                            {imageStats.failed > 0 && !working && (
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() =>
                                         router.post(
                                             ScrapeJobController.retryImages.url(
@@ -218,13 +254,12 @@ export default function JobShow({
                                         )
                                     }
                                 >
-                                    <ImageOff /> Retry {imageStats.failed}{' '}
-                                    images
+                                    <ImageOff /> Retry missing pictures
                                 </Button>
                             )}
                             {!running && (
                                 <Button
-                                    variant="outline"
+                                    variant="ghost"
                                     onClick={() =>
                                         router.post(
                                             ScrapeJobController.rerun.url(
@@ -233,7 +268,7 @@ export default function JobShow({
                                         )
                                     }
                                 >
-                                    <RefreshCw /> Re-run
+                                    <RefreshCw /> Refresh
                                 </Button>
                             )}
                             <ExportDialog
@@ -242,64 +277,74 @@ export default function JobShow({
                                 route={activeRoute}
                                 totalProducts={job.total_products}
                             />
+                            <Button
+                                onClick={() => excel.download(job.id)}
+                                disabled={
+                                    job.total_products === 0 ||
+                                    excel.preparing(job.id)
+                                }
+                            >
+                                {excel.preparing(job.id) ? (
+                                    <Spinner />
+                                ) : (
+                                    <Download />
+                                )}
+                                {excel.preparing(job.id)
+                                    ? 'Preparing…'
+                                    : 'Download Excel'}
+                            </Button>
                         </div>
                     </div>
 
-                    <div className="space-y-1.5">
-                        <div
-                            className="h-1.5 overflow-hidden rounded-full bg-muted"
-                            role="progressbar"
-                            aria-valuenow={progress}
-                            aria-valuemin={0}
-                            aria-valuemax={100}
-                            aria-label="Routes finished"
-                        >
+                    {working && (
+                        <div className="space-y-1.5 rounded-xl border bg-muted/30 px-4 py-3">
+                            <div className="flex flex-wrap items-center justify-between gap-2 text-sm">
+                                <JobActivity
+                                    running={running}
+                                    stalled={stalled}
+                                    crawling={crawling}
+                                    pendingImages={imageStats.pending}
+                                />
+                                <span className="text-xs text-muted-foreground tabular-nums">
+                                    {finished} of {routes.length} sections done
+                                </span>
+                            </div>
                             <div
-                                className={cn(
-                                    'h-full rounded-full bg-primary transition-[width] duration-200',
-                                    running && 'animate-pulse',
-                                )}
-                                style={{
-                                    width: `${Math.max(progress, running ? 4 : 0)}%`,
-                                }}
-                            />
+                                className="h-1.5 overflow-hidden rounded-full bg-muted"
+                                role="progressbar"
+                                aria-valuenow={progress}
+                                aria-valuemin={0}
+                                aria-valuemax={100}
+                                aria-label="Collection progress"
+                            >
+                                <div
+                                    className="h-full rounded-full bg-linear-to-r from-primary to-fuchsia-500 transition-[width] duration-500"
+                                    style={{
+                                        width: `${Math.max(progress, 3)}%`,
+                                    }}
+                                />
+                            </div>
                         </div>
-                        <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted-foreground">
-                            <JobActivity
-                                running={running}
-                                stalled={stalled}
-                                crawling={crawling}
-                                pendingImages={imageStats.pending}
-                            />
-                            <span className="tabular-nums">
-                                {finished} of {routes.length} routes finished
-                            </span>
-                        </div>
-                    </div>
+                    )}
                 </header>
 
                 {problemRoutes.length > 0 && (
-                    <Alert
-                        variant={
-                            problemRoutes.every(
-                                (route) => route.status === 'blocked',
-                            )
-                                ? 'default'
-                                : 'destructive'
-                        }
-                    >
+                    <Alert>
                         <AlertTriangle />
                         <AlertTitle>
                             {problemRoutes.length}{' '}
-                            {problemRoutes.length === 1 ? 'route' : 'routes'}{' '}
-                            could not be extracted
+                            {problemRoutes.length === 1
+                                ? 'section'
+                                : 'sections'}{' '}
+                            could not be read
                         </AlertTitle>
                         <AlertDescription>
                             <ul className="mt-1 space-y-1">
                                 {problemRoutes.map((route) => (
                                     <li key={route.id} className="text-sm">
-                                        <span className="font-mono">
-                                            {new URL(route.url).pathname}
+                                        <span className="font-medium">
+                                            {route.category ??
+                                                new URL(route.url).pathname}
                                         </span>{' '}
                                         — {route.error}
                                     </li>
@@ -327,7 +372,8 @@ export default function JobShow({
                                                 },
                                             })}
                                         >
-                                            <Wand2 /> Open visual recipe picker
+                                            <Wand2 /> Teach Catalogix this
+                                            layout
                                         </Link>
                                     </Button>
                                 )}
@@ -335,31 +381,34 @@ export default function JobShow({
                     </Alert>
                 )}
 
-                <nav
-                    className="-mx-4 flex gap-1 overflow-x-auto border-b px-4"
-                    aria-label="Routes"
-                >
-                    <RouteTab
-                        active={filters.route === null}
-                        onClick={() => applyFilters({ route: null })}
-                        label="All"
-                        count={job.total_products}
-                    />
-                    {routes.map((route) => (
-                        <RouteTab
-                            key={route.id}
-                            active={filters.route === String(route.id)}
-                            onClick={() =>
-                                applyFilters({ route: String(route.id) })
-                            }
-                            label={
-                                route.category ?? new URL(route.url).pathname
-                            }
-                            count={route.products_found}
-                            status={route.status}
+                {routes.length > 1 && (
+                    <nav
+                        className="-mx-4 flex gap-1 overflow-x-auto border-b px-4 md:-mx-6 md:px-6"
+                        aria-label="Sections"
+                    >
+                        <SectionTab
+                            active={filters.route === null}
+                            onClick={() => applyFilters({ route: null })}
+                            label="All"
+                            count={job.total_products}
                         />
-                    ))}
-                </nav>
+                        {routes.map((route) => (
+                            <SectionTab
+                                key={route.id}
+                                active={filters.route === String(route.id)}
+                                onClick={() =>
+                                    applyFilters({ route: String(route.id) })
+                                }
+                                label={
+                                    route.category ??
+                                    new URL(route.url).pathname
+                                }
+                                count={route.products_found}
+                                status={route.status}
+                            />
+                        ))}
+                    </nav>
+                )}
 
                 <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
                     <div className="relative flex-1">
@@ -367,53 +416,61 @@ export default function JobShow({
                         <Input
                             value={search}
                             onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search name, SKU or brand"
+                            placeholder="Search by name, SKU or brand"
                             className="pl-9"
                             aria-label="Search products"
                         />
                     </div>
-                    <Select
-                        value={filters.category ?? 'all'}
-                        onValueChange={(value) =>
-                            applyFilters({
-                                category: value === 'all' ? null : value,
-                            })
-                        }
-                    >
-                        <SelectTrigger
-                            className="sm:w-56"
-                            aria-label="Category"
+                    {categories.length > 1 && (
+                        <Select
+                            value={filters.category ?? 'all'}
+                            onValueChange={(value) =>
+                                applyFilters({
+                                    category: value === 'all' ? null : value,
+                                })
+                            }
                         >
-                            <SelectValue placeholder="All categories" />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="all">All categories</SelectItem>
-                            {categories.map((category) => (
-                                <SelectItem
-                                    key={category.id}
-                                    value={String(category.id)}
-                                >
-                                    {category.name} ({category.count})
+                            <SelectTrigger
+                                className="sm:w-56"
+                                aria-label="Category"
+                            >
+                                <SelectValue placeholder="All categories" />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="all">
+                                    All categories
                                 </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                    <Button
-                        variant={
-                            filters.image === 'failed' ? 'default' : 'outline'
-                        }
-                        onClick={() =>
-                            applyFilters({
-                                image:
-                                    filters.image === 'failed'
-                                        ? null
-                                        : 'failed',
-                            })
-                        }
-                        aria-pressed={filters.image === 'failed'}
-                    >
-                        <ImageOff /> Failed images
-                    </Button>
+                                {categories.map((category) => (
+                                    <SelectItem
+                                        key={category.id}
+                                        value={String(category.id)}
+                                    >
+                                        {category.name} ({category.count})
+                                    </SelectItem>
+                                ))}
+                            </SelectContent>
+                        </Select>
+                    )}
+                    {(imageStats.failed > 0 || filters.image === 'failed') && (
+                        <Button
+                            variant={
+                                filters.image === 'failed'
+                                    ? 'default'
+                                    : 'outline'
+                            }
+                            onClick={() =>
+                                applyFilters({
+                                    image:
+                                        filters.image === 'failed'
+                                            ? null
+                                            : 'failed',
+                                })
+                            }
+                            aria-pressed={filters.image === 'failed'}
+                        >
+                            <ImageOff /> Missing pictures
+                        </Button>
+                    )}
                 </div>
 
                 {rows.length === 0 && running && <ProductSkeleton />}
@@ -423,36 +480,35 @@ export default function JobShow({
                         icon={PackageSearch}
                         title={
                             filters.search || filters.category || filters.image
-                                ? 'No products match these filters'
+                                ? 'No products match'
                                 : 'No products were found'
                         }
                         description={
                             filters.search || filters.category || filters.image
-                                ? 'Clear a filter to see more.'
-                                : 'Every route finished without products. See the notes above.'
+                                ? 'Clear the search or filter to see more.'
+                                : 'The pages were checked but no products could be read. See the note above.'
                         }
                     />
                 )}
 
                 {rows.length > 0 && (
-                    <div className="overflow-hidden rounded-xl border">
+                    <div className="overflow-hidden rounded-xl border bg-card">
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead className="w-16">
-                                        Image
+                                    <TableHead className="w-20">
+                                        Picture
                                     </TableHead>
-                                    <TableHead>Name</TableHead>
+                                    <TableHead>Product</TableHead>
+                                    <TableHead>Category</TableHead>
                                     <TableHead className="text-right">
                                         Price
                                     </TableHead>
-                                    <TableHead className="text-right">
-                                        Sale price
-                                    </TableHead>
-                                    <TableHead>Category</TableHead>
                                     <TableHead>Stock</TableHead>
                                     <TableHead className="w-10">
-                                        <span className="sr-only">Link</span>
+                                        <span className="sr-only">
+                                            On website
+                                        </span>
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -460,62 +516,90 @@ export default function JobShow({
                                 {rows.map((product) => (
                                     <TableRow
                                         key={product.id}
-                                        className="animate-in duration-150 fade-in"
+                                        className="animate-in cursor-pointer duration-150 fade-in"
+                                        onClick={(event) => {
+                                            if (
+                                                !(
+                                                    event.target as HTMLElement
+                                                ).closest('a,button')
+                                            ) {
+                                                setSelected(product);
+                                            }
+                                        }}
                                     >
                                         <TableCell>
                                             <ProductThumb
                                                 image={product.image}
                                                 name={product.name}
+                                                className="size-16"
                                             />
                                         </TableCell>
-                                        <TableCell className="max-w-96">
-                                            <p className="line-clamp-2 text-sm font-medium">
+                                        <TableCell className="max-w-96 min-w-56">
+                                            <button
+                                                type="button"
+                                                onClick={() =>
+                                                    setSelected(product)
+                                                }
+                                                className="line-clamp-2 text-left text-sm font-medium hover:underline focus-visible:underline focus-visible:outline-none"
+                                            >
                                                 {product.name}
-                                            </p>
+                                            </button>
                                             {(product.brand || product.sku) && (
                                                 <p className="truncate font-mono text-xs text-muted-foreground">
                                                     {[
                                                         product.brand,
-                                                        product.sku,
+                                                        product.sku &&
+                                                            `SKU ${product.sku}`,
                                                     ]
                                                         .filter(Boolean)
                                                         .join(' · ')}
                                                 </p>
                                             )}
-                                        </TableCell>
-                                        <TableCell
-                                            className={cn(
-                                                'text-right font-mono text-sm whitespace-nowrap tabular-nums',
-                                                product.sale_price &&
-                                                    'text-muted-foreground line-through',
+                                            {product.description && (
+                                                <p className="line-clamp-1 text-xs text-muted-foreground">
+                                                    {product.description}
+                                                </p>
                                             )}
-                                        >
-                                            {formatTaka(product.price)}
                                         </TableCell>
-                                        <TableCell className="text-right font-mono text-sm font-medium whitespace-nowrap text-success tabular-nums">
-                                            {product.sale_price
-                                                ? formatTaka(product.sale_price)
-                                                : ''}
-                                        </TableCell>
-                                        <TableCell className="text-sm whitespace-nowrap">
+                                        <TableCell className="text-sm">
                                             {product.category ?? '—'}
-                                        </TableCell>
-                                        <TableCell>
-                                            {product.in_stock === true && (
-                                                <ToneBadge tone="success">
-                                                    In stock
-                                                </ToneBadge>
-                                            )}
-                                            {product.in_stock === false && (
-                                                <ToneBadge tone="danger">
-                                                    Out of stock
-                                                </ToneBadge>
-                                            )}
-                                            {product.in_stock === null && (
-                                                <span className="text-xs text-muted-foreground">
-                                                    —
+                                            {product.subcategory && (
+                                                <span className="block text-xs text-muted-foreground">
+                                                    › {product.subcategory}
                                                 </span>
                                             )}
+                                        </TableCell>
+                                        <TableCell className="text-right font-mono text-sm whitespace-nowrap tabular-nums">
+                                            {product.sale_price ? (
+                                                <>
+                                                    <span className="block font-medium text-success">
+                                                        {formatTaka(
+                                                            product.sale_price,
+                                                        )}
+                                                    </span>
+                                                    <span className="text-xs text-muted-foreground line-through">
+                                                        {formatTaka(
+                                                            product.price,
+                                                        )}
+                                                    </span>
+                                                    {product.discount_percent ? (
+                                                        <span className="ml-1 rounded bg-success/10 px-1 text-[10px] font-semibold text-success">
+                                                            −
+                                                            {
+                                                                product.discount_percent
+                                                            }
+                                                            %
+                                                        </span>
+                                                    ) : null}
+                                                </>
+                                            ) : (
+                                                formatTaka(product.price)
+                                            )}
+                                        </TableCell>
+                                        <TableCell>
+                                            <StockBadge
+                                                inStock={product.in_stock}
+                                            />
                                         </TableCell>
                                         <TableCell>
                                             {product.product_url && (
@@ -524,7 +608,7 @@ export default function JobShow({
                                                     target="_blank"
                                                     rel="noreferrer"
                                                     className="inline-flex rounded p-1 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                                                    aria-label={`Open ${product.name} on the site`}
+                                                    aria-label={`Open ${product.name} on the website`}
                                                 >
                                                     <ExternalLink className="size-4" />
                                                 </a>
@@ -545,11 +629,12 @@ export default function JobShow({
                 <div className="flex justify-end">
                     <Button
                         variant="ghost"
-                        className="text-destructive hover:text-destructive"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
                         onClick={() => {
                             if (
                                 confirm(
-                                    'Delete this job? Products stay in the catalogue and in other jobs.',
+                                    'Delete this collection? The products stay saved for this website.',
                                 )
                             ) {
                                 router.delete(
@@ -558,10 +643,15 @@ export default function JobShow({
                             }
                         }}
                     >
-                        <Trash2 /> Delete job
+                        <Trash2 /> Delete this collection
                     </Button>
                 </div>
             </div>
+
+            <ProductDetails
+                product={selected}
+                onOpenChange={(open) => !open && setSelected(null)}
+            />
         </>
     );
 }
@@ -580,7 +670,7 @@ function JobActivity({
     if (stalled) {
         return (
             <span className="flex items-center gap-1.5 text-warning">
-                <Clock className="size-3" /> Waiting for a queue worker
+                <Clock className="size-4" /> Waiting for the background worker
             </span>
         );
     }
@@ -588,8 +678,8 @@ function JobActivity({
     if (crawling) {
         return (
             <span className="flex min-w-0 items-center gap-1.5 text-primary">
-                <Spinner className="size-3 shrink-0" />
-                <span className="font-medium">Extracting</span>
+                <Spinner className="size-4 shrink-0" />
+                <span className="font-medium">Collecting</span>
                 <span className="truncate text-muted-foreground">
                     {crawling.category ?? new URL(crawling.url).pathname} · page{' '}
                     {crawling.pages_crawled + 1} ·{' '}
@@ -602,31 +692,28 @@ function JobActivity({
     if (running) {
         return (
             <span className="flex items-center gap-1.5 text-primary">
-                <Spinner className="size-3" />
-                <span className="font-medium">Queued</span>
+                <Spinner className="size-4" />
+                <span className="font-medium">Collecting</span>
                 <span className="text-muted-foreground">
-                    next page starts after a short polite pause…
+                    next page in a moment — Catalogix pauses between pages to be
+                    polite…
                 </span>
             </span>
         );
     }
 
-    if (pendingImages > 0) {
-        return (
-            <span className="flex items-center gap-1.5 text-primary">
-                <Spinner className="size-3" />
-                <span className="font-medium">Downloading images</span>
-                <span className="text-muted-foreground">
-                    {formatCount(pendingImages)} left
-                </span>
+    return (
+        <span className="flex items-center gap-1.5 text-primary">
+            <Spinner className="size-4" />
+            <span className="font-medium">Saving pictures</span>
+            <span className="text-muted-foreground">
+                {formatCount(pendingImages)} left
             </span>
-        );
-    }
-
-    return <span />;
+        </span>
+    );
 }
 
-function RouteTab({
+function SectionTab({
     active,
     onClick,
     label,
@@ -659,7 +746,7 @@ function RouteTab({
                     : 'border-transparent text-muted-foreground hover:text-foreground',
             )}
         >
-            {status && (
+            {status && status !== 'done' && (
                 <span
                     aria-label={status}
                     className={cn('size-2 rounded-full', dot[status])}
@@ -681,7 +768,7 @@ function ProductSkeleton() {
         >
             {Array.from({ length: 6 }).map((_, index) => (
                 <div key={index} className="flex items-center gap-4">
-                    <Skeleton className="size-12" />
+                    <Skeleton className="size-16" />
                     <Skeleton className="h-4 flex-1" />
                     <Skeleton className="h-4 w-20" />
                     <Skeleton className="h-4 w-24" />
@@ -693,7 +780,7 @@ function ProductSkeleton() {
 
 JobShow.layout = {
     breadcrumbs: [
-        { title: 'History', href: jobsIndex() },
+        { title: 'Websites', href: discover() },
         { title: 'Products', href: '#' },
     ],
 };

@@ -20,6 +20,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::post('discoveries', [DiscoveryController::class, 'store'])->middleware('throttle:discoveries')->name('discoveries.store');
     Route::get('discoveries/{discovery}', [DiscoveryController::class, 'show'])->name('discoveries.show');
     Route::post('discoveries/{discovery}/extract', [DiscoveryController::class, 'extract'])->name('discoveries.extract');
+    Route::post('discoveries/{discovery}/refresh', [DiscoveryController::class, 'refresh'])->middleware('throttle:discoveries')->name('discoveries.refresh');
     Route::post('discoveries/{discovery}/rediscover', [DiscoveryController::class, 'rediscover'])->middleware('throttle:discoveries')->name('discoveries.rediscover');
     Route::delete('discoveries/{discovery}', [DiscoveryController::class, 'destroy'])->name('discoveries.destroy');
 
@@ -32,6 +33,8 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::get('exports', [ExportController::class, 'index'])->name('exports.index');
     Route::post('exports', [ExportController::class, 'store'])->middleware('throttle:exports')->name('exports.store');
     Route::delete('exports/{export}', [ExportController::class, 'destroy'])->name('exports.destroy');
+    Route::post('jobs/{job}/excel', [ExportController::class, 'quick'])->middleware('throttle:exports')->name('jobs.excel');
+    Route::get('exports/{export}/status', [ExportController::class, 'status'])->name('exports.status');
 
     Route::get('sites', [SiteController::class, 'index'])->name('sites.index');
     Route::get('sites/{site}/recipe', [RecipeController::class, 'edit'])->name('sites.recipe.edit');

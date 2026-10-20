@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Http\Requests\ExtractRoutesRequest;
 use App\Http\Requests\StoreDiscoveryRequest;
 use App\Http\Resources\DiscoveryResource;
+use App\Http\Resources\SiteRunResource;
 use App\Models\Discovery;
 use App\Services\DiscoveryService;
 use App\Services\ExtractionService;
@@ -17,22 +18,66 @@ use Inertia\Response;
 class DiscoveryController extends Controller
 {
     /**
-     * The domain input plus the user's recent discoveries.
+     * The one page most people need: paste websites, watch each one go from "finding" to
+     * "ready", then view or download its products.
      */
     public function index(Request $request): Response
     {
-        $recent = $request->user()->discoveries()->with('site')->latest()->limit(8)->get();
+        $runs = $request->user()->discoveries()
+            ->with(['site', 'latestJob' => fn ($query) => $query->withCount([
+                'targets',
+                'targets as finished_targets_count' => fn ($targets) => $targets->whereIn('status', ['done', 'blocked', 'failed']),
+            ])])
+            ->latest()
+            ->paginate(15);
 
         return Inertia::render('discover/index', [
-            'recent' => DiscoveryResource::collection($recent),
+            'runs' => SiteRunResource::collection($runs),
         ]);
     }
 
+    /**
+     * One or many websites; each is discovered and then extracted without further clicks.
+     */
     public function store(StoreDiscoveryRequest $request, DiscoveryService $discoveries): RedirectResponse
     {
-        $discovery = $discoveries->start($request->user(), $request->validated('domain'));
+        ['started' => $started, 'skipped' => $skipped] = $discoveries->startMany($request->user(), $request->domains());
 
-        return to_route('discoveries.show', $discovery);
+        $message = match (true) {
+            $started === [] => (count($skipped) === 1 ? "{$skipped[0]} is" : 'These websites are').' already being collected.',
+            count($started) === 1 => "Started {$started[0]->site->domain}. Products appear here as they are collected.",
+            default => 'Started '.count($started).' websites. Products appear here as they are collected.',
+        };
+
+        Inertia::flash('toast', ['type' => $started === [] ? 'info' : 'success', 'message' => $message]);
+
+        return to_route('discover');
+    }
+
+    /**
+     * "Refresh": collect the same pages again when a site has been collected before,
+     * otherwise look for product pages again.
+     */
+    public function refresh(Discovery $discovery, DiscoveryService $discoveries, ExtractionService $extraction): RedirectResponse
+    {
+        Gate::authorize('update', $discovery);
+
+        $job = $discovery->latestJob;
+
+        if (($job !== null && ! $job->status->isFinished()) || ! $discovery->status->isFinished()) {
+            return back();
+        }
+
+        if ($job !== null && $job->total_products > 0) {
+            $extraction->rerun($job);
+        } else {
+            $discovery->forceFill(['auto_extract' => true])->save();
+            $discoveries->restart($discovery);
+        }
+
+        Inertia::flash('toast', ['type' => 'success', 'message' => "Refreshing {$discovery->site->domain}."]);
+
+        return back();
     }
 
     /**

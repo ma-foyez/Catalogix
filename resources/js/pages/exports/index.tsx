@@ -60,11 +60,11 @@ export default function ExportsIndex({
 
     return (
         <>
-            <Head title="Exports" />
+            <Head title="Downloads" />
 
             <div className="flex flex-col gap-5 px-4 py-6">
                 <header>
-                    <h1 className="text-xl font-semibold">Exports</h1>
+                    <h1 className="text-xl font-semibold">Downloads</h1>
                     <p className="text-sm text-muted-foreground">
                         Download links are signed and work for 24 hours; the
                         file is removed after that.
@@ -218,5 +218,5 @@ export default function ExportsIndex({
 }
 
 ExportsIndex.layout = {
-    breadcrumbs: [{ title: 'Exports', href: exportsIndex() }],
+    breadcrumbs: [{ title: 'Downloads', href: exportsIndex() }],
 };

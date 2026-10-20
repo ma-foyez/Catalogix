@@ -1,103 +1,149 @@
-import { Form, Head, Link, usePage } from '@inertiajs/react';
+import { Form, Head, Link, router, usePage } from '@inertiajs/react';
 import {
-    ArrowRight,
-    FileSpreadsheet,
+    AlertTriangle,
+    Ban,
+    Check,
+    Clock,
+    Download,
+    Eye,
     Globe,
+    ImageIcon,
     ListChecks,
-    Radar,
-    ShieldCheck,
+    MoreHorizontal,
+    Package,
+    RefreshCw,
+    Sparkles,
+    Trash2,
 } from 'lucide-react';
-import { useRef } from 'react';
+import { useMemo, useState } from 'react';
 import DiscoveryController from '@/actions/App/Http/Controllers/DiscoveryController';
-import { DiscoveryActivity } from '@/components/discovery-progress';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
-import { StatusBadge } from '@/components/status-badge';
+import { PaginationLinks } from '@/components/pagination-links';
+import { ToneBadge } from '@/components/status-badge';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
 import { Spinner } from '@/components/ui/spinner';
+import { useExcelDownload } from '@/hooks/use-excel-download';
 import { useLivePoll } from '@/hooks/use-live-poll';
 import { formatCount, timeAgo } from '@/lib/format';
 import { cn } from '@/lib/utils';
 import { discover } from '@/routes';
-import { show } from '@/routes/discoveries';
-import type { Discovery } from '@/types/catalogix';
+import { show as discoveryShow } from '@/routes/discoveries';
+import { show as jobShow } from '@/routes/jobs';
+import type { Paginated, RunPhase, SiteRun } from '@/types/catalogix';
 
-const EXAMPLES = ['chaldal.com', 'v2.sawdahexpress.com.bd', 'shajgoj.com'];
+const MAX_SITES = 20;
 
-const STEPS = [
+const PHASES: Record<
+    RunPhase,
     {
-        icon: Radar,
-        title: 'Discover',
-        text: 'Sitemaps, catalogue and menu become a scored list of product pages.',
-    },
-    {
-        icon: ListChecks,
-        title: 'Tick & extract',
-        text: 'Name, price, sale price, stock and a local image for every product.',
-    },
-    {
-        icon: FileSpreadsheet,
-        title: 'Export',
-        text: 'Excel with pictures in the cells, CSV or an images ZIP.',
-    },
+        label: string;
+        tone: 'neutral' | 'info' | 'success' | 'warning' | 'danger' | 'brand';
+        active: boolean;
+    }
+> = {
+    waiting: { label: 'Waiting', tone: 'neutral', active: true },
+    finding: { label: 'Finding products', tone: 'brand', active: true },
+    collecting: { label: 'Collecting products', tone: 'brand', active: true },
+    images: { label: 'Saving pictures', tone: 'info', active: true },
+    ready: { label: 'Ready', tone: 'success', active: false },
+    review: { label: 'Needs your choice', tone: 'warning', active: false },
+    empty: { label: 'No products found', tone: 'warning', active: false },
+    blocked: { label: 'Website blocked us', tone: 'warning', active: false },
+    failed: { label: "Couldn't finish", tone: 'danger', active: false },
+};
+
+const STEPS: { label: string; phases: RunPhase[] }[] = [
+    { label: 'Find pages', phases: ['waiting', 'finding'] },
+    { label: 'Collect products', phases: ['collecting'] },
+    { label: 'Save pictures', phases: ['images'] },
+    { label: 'Ready', phases: ['ready'] },
 ];
+
+/** Mirrors the server's reading of pasted text so people see what will be added. */
+function readDomains(text: string): { domains: string[]; invalid: string[] } {
+    const domains: string[] = [];
+    const invalid: string[] = [];
+
+    for (const raw of text.split(/[\s,;|]+/)) {
+        const token = raw.replace(/^["'<([]+|["'>)\]]+$/g, '');
+
+        if (!token) {
+            continue;
+        }
+
+        try {
+            const host = new URL(
+                /^https?:\/\//i.test(token) ? token : `https://${token}`,
+            ).hostname
+                .toLowerCase()
+                .replace(/^www\./, '');
+
+            if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(host)) {
+                if (!domains.includes(host)) {
+                    domains.push(host);
+                }
+
+                continue;
+            }
+        } catch {
+            // falls through to invalid
+        }
+
+        invalid.push(token);
+    }
+
+    return { domains, invalid };
+}
 
 /*
  * Design brief
- * User: seller or sourcing agent who wants another shop's catalogue.
- * Main task: type only a domain and start route discovery.
- * Key information: what Catalogix will do next; recent discoveries and what each is doing now.
- * Primary action: "Find product routes".
- * States: empty history, validation error, submitting, recent list with live activity,
- * waiting for a worker.
+ * User: a seller or buyer who wants another shop's product list — not technical.
+ * Main task: paste one or more website addresses, then come back to products and an Excel file.
+ * Key information: per website — what is happening now in plain words, progress, how many
+ * products and pictures, and when it is ready.
+ * Primary action: "Collect products"; per ready site "View products" and "Download Excel".
+ * States: empty, pasting (live preview of what will be added), invalid input, working (live),
+ * ready, nothing found, blocked, failed, waiting for the background worker.
  */
-export default function DiscoverIndex({
-    recent,
-}: {
-    recent: { data: Discovery[] };
-}) {
+export default function Websites({ runs }: { runs: Paginated<SiteRun> }) {
     const { queueStalled } = usePage().props;
-    const input = useRef<HTMLInputElement>(null);
-    const active = recent.data.some(
-        (d) => d.status === 'queued' || d.status === 'running',
-    );
-    const discoveryStalled =
-        queueStalled?.queues.includes('discovery') ?? false;
+    const [text, setText] = useState('');
+    const preview = useMemo(() => readDomains(text), [text]);
+    const active = runs.data.some((run) => PHASES[run.phase].active);
+    const excel = useExcelDownload();
 
-    useLivePoll(active, ['recent'], 2500);
+    useLivePoll(active, ['runs'], 2500);
 
     return (
         <>
-            <Head title="Discover" />
+            <Head title="Websites" />
 
-            <div className="mx-auto flex w-full max-w-4xl flex-col gap-10 px-4 py-8 md:py-12">
-                <section className="relative overflow-hidden rounded-2xl border bg-card px-5 py-8 md:px-10 md:py-12">
+            <div className="mx-auto flex w-full max-w-5xl flex-col gap-8 px-4 py-8 md:py-10">
+                <section className="relative overflow-hidden rounded-2xl border bg-card px-5 py-7 md:px-8 md:py-9">
                     <div
                         aria-hidden
-                        className="pointer-events-none absolute inset-0 bg-[linear-gradient(to_right,var(--border)_1px,transparent_1px),linear-gradient(to_bottom,var(--border)_1px,transparent_1px)] mask-[radial-gradient(ellipse_at_top_right,black_10%,transparent_65%)] bg-size-[28px_28px] opacity-60"
-                    />
-                    <div
-                        aria-hidden
-                        className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-primary/20 blur-3xl"
+                        className="pointer-events-none absolute -top-24 -right-24 size-72 rounded-full bg-primary/15 blur-3xl"
                     />
 
-                    <div className="relative space-y-6">
-                        <div className="space-y-3">
-                            <span className="inline-flex items-center gap-1.5 rounded-full border bg-background/70 px-2.5 py-1 text-xs font-medium text-muted-foreground backdrop-blur">
-                                <span className="size-1.5 rounded-full bg-primary" />
-                                No AI, no paid services — just the shop's own
-                                pages
-                            </span>
-                            <h1 className="text-2xl font-semibold tracking-tight text-balance md:text-4xl">
-                                Find every product route on a site
+                    <div className="relative space-y-5">
+                        <div className="space-y-2">
+                            <h1 className="text-2xl font-semibold tracking-tight text-balance md:text-3xl">
+                                Collect products from any website
                             </h1>
                             <p className="max-w-2xl text-sm text-muted-foreground md:text-base">
-                                Enter a shop's domain. Catalogix reads its
-                                sitemap, menu and catalogue, then suggests the
-                                pages that list products — you tick the ones to
-                                extract.
+                                Paste one or more shop addresses. Catalogix
+                                finds their products, saves every picture and
+                                gets an Excel file ready — you don't need to do
+                                anything else.
                             </p>
                         </div>
 
@@ -105,211 +151,425 @@ export default function DiscoverIndex({
                             {...DiscoveryController.store.form()}
                             className="space-y-2"
                             disableWhileProcessing
+                            onSuccess={() => setText('')}
                         >
-                            {({ processing, errors }) => (
+                            {({ processing, errors, clearErrors }) => (
                                 <>
-                                    <Label htmlFor="domain" className="sr-only">
-                                        Domain
+                                    <Label
+                                        htmlFor="domains"
+                                        className="sr-only"
+                                    >
+                                        Website addresses
                                     </Label>
-                                    <div className="flex flex-col gap-2 rounded-xl border bg-background p-1.5 shadow-sm focus-within:ring-2 focus-within:ring-ring/40 sm:flex-row">
-                                        <div className="relative flex-1">
-                                            <Globe className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                                            <Input
-                                                ref={input}
-                                                id="domain"
-                                                name="domain"
-                                                placeholder="chaldal.com"
-                                                autoComplete="off"
-                                                autoFocus
-                                                required
-                                                aria-invalid={
-                                                    errors.domain
-                                                        ? true
-                                                        : undefined
+                                    <div className="rounded-xl border bg-background shadow-sm focus-within:ring-2 focus-within:ring-ring/40">
+                                        <textarea
+                                            id="domains"
+                                            name="domains"
+                                            value={text}
+                                            onChange={(event) => {
+                                                setText(event.target.value);
+                                                clearErrors('domains');
+                                            }}
+                                            onKeyDown={(event) => {
+                                                if (
+                                                    event.key === 'Enter' &&
+                                                    !event.shiftKey
+                                                ) {
+                                                    event.preventDefault();
+                                                    event.currentTarget.form?.requestSubmit();
                                                 }
-                                                className="h-11 border-0 pl-9 font-mono text-base shadow-none focus-visible:ring-0"
-                                            />
-                                        </div>
-                                        <Button
-                                            type="submit"
-                                            size="lg"
-                                            className="h-11"
-                                            disabled={processing}
-                                        >
-                                            {processing ? (
-                                                <Spinner />
-                                            ) : (
-                                                <Radar />
-                                            )}
-                                            {processing
-                                                ? 'Starting…'
-                                                : 'Find product routes'}
-                                        </Button>
-                                    </div>
-                                    <InputError message={errors.domain} />
-                                    <div className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
-                                        <span>Try</span>
-                                        {EXAMPLES.map((example) => (
-                                            <button
-                                                key={example}
-                                                type="button"
-                                                onClick={() => {
-                                                    if (input.current) {
-                                                        input.current.value =
-                                                            example;
-                                                        input.current.focus();
-                                                    }
-                                                }}
-                                                className="rounded-md border bg-background px-1.5 py-0.5 font-mono transition-colors hover:border-primary/40 hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                                            }}
+                                            rows={2}
+                                            required
+                                            autoFocus
+                                            aria-invalid={
+                                                errors.domains
+                                                    ? true
+                                                    : undefined
+                                            }
+                                            placeholder="chaldal.com, https://www.rflbd.com, bongofurniture.com"
+                                            className="block max-h-48 min-h-14 w-full resize-y rounded-t-xl bg-transparent px-4 py-3 font-mono text-sm outline-none placeholder:text-muted-foreground"
+                                        />
+                                        <div className="flex flex-wrap items-center gap-2 border-t px-3 py-2">
+                                            <div className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+                                                {preview.domains.length === 0 &&
+                                                preview.invalid.length === 0 ? (
+                                                    <span>
+                                                        Full links are fine. Put
+                                                        several on new lines or
+                                                        separate them with
+                                                        commas (up to{' '}
+                                                        {MAX_SITES}).
+                                                    </span>
+                                                ) : (
+                                                    <>
+                                                        {preview.domains.map(
+                                                            (domain) => (
+                                                                <span
+                                                                    key={domain}
+                                                                    className="inline-flex items-center gap-1 rounded-md border bg-muted/60 px-1.5 py-0.5 font-mono text-foreground"
+                                                                >
+                                                                    <Check className="size-3 text-success" />
+                                                                    {domain}
+                                                                </span>
+                                                            ),
+                                                        )}
+                                                        {preview.invalid.map(
+                                                            (token) => (
+                                                                <span
+                                                                    key={token}
+                                                                    className="inline-flex max-w-48 items-center gap-1 truncate rounded-md border border-destructive/40 px-1.5 py-0.5 font-mono text-destructive"
+                                                                    title="Not a website address"
+                                                                >
+                                                                    {token}
+                                                                </span>
+                                                            ),
+                                                        )}
+                                                    </>
+                                                )}
+                                            </div>
+                                            <Button
+                                                type="submit"
+                                                disabled={
+                                                    processing ||
+                                                    preview.domains.length === 0
+                                                }
                                             >
-                                                {example}
-                                            </button>
-                                        ))}
+                                                {processing ? (
+                                                    <Spinner />
+                                                ) : (
+                                                    <Sparkles />
+                                                )}
+                                                {preview.domains.length > 1
+                                                    ? `Collect from ${preview.domains.length} websites`
+                                                    : 'Collect products'}
+                                            </Button>
+                                        </div>
                                     </div>
+                                    <InputError message={errors.domains} />
                                 </>
                             )}
                         </Form>
 
-                        <ol className="grid gap-3 pt-2 sm:grid-cols-3">
-                            {STEPS.map((step, index) => (
-                                <li
-                                    key={step.title}
-                                    className="flex gap-3 rounded-xl border bg-background/60 p-3 backdrop-blur"
-                                >
-                                    <span className="flex size-8 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                                        <step.icon className="size-4" />
-                                    </span>
-                                    <div className="space-y-0.5">
-                                        <p className="text-sm font-medium">
-                                            <span className="font-mono text-xs text-muted-foreground">
-                                                0{index + 1}
-                                            </span>{' '}
-                                            {step.title}
-                                        </p>
-                                        <p className="text-xs text-muted-foreground">
-                                            {step.text}
-                                        </p>
-                                    </div>
-                                </li>
-                            ))}
-                        </ol>
-
-                        <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-                            <ShieldCheck className="size-3.5 text-success" />
-                            One page at a time per site, robots.txt respected.
-                            Pages behind a login, CAPTCHA or bot check are
-                            marked blocked, never bypassed.
+                        <p className="text-xs text-muted-foreground">
+                            Catalogix visits one page at a time and respects
+                            each site's rules. Pages behind a login or a robot
+                            check are skipped, never forced.
                         </p>
                     </div>
                 </section>
 
                 <section className="space-y-3">
                     <div className="flex items-center justify-between">
-                        <h2 className="text-sm font-medium">
-                            Recent discoveries
-                        </h2>
+                        <h2 className="font-medium">Your websites</h2>
                         {active && (
                             <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
                                 <span className="relative flex size-2">
                                     <span className="absolute inline-flex size-full animate-ping rounded-full bg-primary opacity-60" />
                                     <span className="relative inline-flex size-2 rounded-full bg-primary" />
                                 </span>
-                                Live
+                                Updating live
                             </span>
                         )}
                     </div>
 
-                    {recent.data.length === 0 ? (
+                    {runs.data.length === 0 ? (
                         <EmptyState
-                            icon={Radar}
-                            title="No discoveries yet"
-                            description="Your first domain will show up here with the routes it found."
+                            icon={Globe}
+                            title="No websites yet"
+                            description="Paste a shop's address above. It shows up here while its products are collected."
                         />
                     ) : (
-                        <ul className="divide-y overflow-hidden rounded-xl border bg-card">
-                            {recent.data.map((discovery) => {
-                                const running =
-                                    discovery.status === 'queued' ||
-                                    discovery.status === 'running';
-
-                                return (
-                                    <li key={discovery.id}>
-                                        <Link
-                                            href={show(discovery.id)}
-                                            className={cn(
-                                                'group flex items-center gap-3 px-4 py-3 transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none',
-                                                running && 'bg-primary/3',
-                                            )}
-                                        >
-                                            <span
-                                                className={cn(
-                                                    'flex size-9 shrink-0 items-center justify-center rounded-lg border',
-                                                    running
-                                                        ? 'border-primary/30 bg-primary/10 text-primary'
-                                                        : 'bg-muted text-muted-foreground',
-                                                )}
-                                            >
-                                                {running &&
-                                                !(
-                                                    discoveryStalled &&
-                                                    discovery.status ===
-                                                        'queued'
-                                                ) ? (
-                                                    <Spinner className="size-4" />
-                                                ) : (
-                                                    <Globe className="size-4" />
-                                                )}
-                                            </span>
-                                            <span className="min-w-0 flex-1 space-y-0.5">
-                                                <span className="block truncate font-mono text-sm">
-                                                    {discovery.domain}
-                                                </span>
-                                                {running ? (
-                                                    <DiscoveryActivity
-                                                        discovery={discovery}
-                                                        stalled={
-                                                            discoveryStalled
-                                                        }
-                                                    />
-                                                ) : (
-                                                    <span
-                                                        suppressHydrationWarning
-                                                        className="block truncate text-xs text-muted-foreground"
-                                                    >
-                                                        {discovery.status ===
-                                                        'done'
-                                                            ? `${formatCount(discovery.routes_found)} product ${discovery.routes_found === 1 ? 'route' : 'routes'}`
-                                                            : (discovery.error ??
-                                                              'Failed')}{' '}
-                                                        ·{' '}
-                                                        {timeAgo(
-                                                            discovery.created_at,
-                                                        )}
-                                                    </span>
-                                                )}
-                                            </span>
-                                            <StatusBadge
-                                                status={discovery.status}
-                                                label={
-                                                    discovery.status ===
-                                                    'running'
-                                                        ? 'Discovering'
-                                                        : undefined
-                                                }
-                                            />
-                                            <ArrowRight className="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                                        </Link>
-                                    </li>
-                                );
-                            })}
+                        <ul className="space-y-3">
+                            {runs.data.map((run) => (
+                                <SiteCard
+                                    key={run.id}
+                                    run={run}
+                                    stalled={
+                                        run.phase === 'waiting' &&
+                                        (queueStalled?.queues.includes(
+                                            'discovery',
+                                        ) ??
+                                            false)
+                                    }
+                                    preparing={
+                                        run.job_id !== null &&
+                                        excel.preparing(run.job_id)
+                                    }
+                                    onDownload={() =>
+                                        run.job_id && excel.download(run.job_id)
+                                    }
+                                />
+                            ))}
                         </ul>
                     )}
+
+                    <PaginationLinks page={runs} only={['runs']} />
                 </section>
             </div>
         </>
     );
 }
 
-DiscoverIndex.layout = {
-    breadcrumbs: [{ title: 'Discover', href: discover() }],
+function SiteCard({
+    run,
+    stalled,
+    preparing,
+    onDownload,
+}: {
+    run: SiteRun;
+    stalled: boolean;
+    preparing: boolean;
+    onDownload: () => void;
+}) {
+    const phase = PHASES[run.phase];
+    const step = STEPS.findIndex((s) => s.phases.includes(run.phase));
+    const problem = ['empty', 'blocked', 'failed'].includes(run.phase);
+    const canView = run.job_id !== null && run.products > 0;
+
+    return (
+        <li
+            className={cn(
+                'overflow-hidden rounded-xl border bg-card transition-shadow',
+                phase.active && 'border-primary/30 shadow-sm shadow-primary/5',
+            )}
+        >
+            <div className="flex flex-wrap items-start gap-4 p-4">
+                <span
+                    className={cn(
+                        'flex size-11 shrink-0 items-center justify-center rounded-xl border text-lg font-semibold uppercase',
+                        run.phase === 'ready'
+                            ? 'border-success/30 bg-success/10 text-success'
+                            : phase.active
+                              ? 'border-primary/30 bg-primary/10 text-primary'
+                              : 'bg-muted text-muted-foreground',
+                    )}
+                    aria-hidden
+                >
+                    {run.domain.charAt(0)}
+                </span>
+
+                <div className="min-w-0 flex-1 space-y-1.5">
+                    <div className="flex flex-wrap items-center gap-2">
+                        <a
+                            href={`https://${run.domain}`}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="truncate font-mono font-medium hover:underline"
+                        >
+                            {run.domain}
+                        </a>
+                        <ToneBadge tone={stalled ? 'warning' : phase.tone}>
+                            {phase.active && !stalled && (
+                                <Spinner className="size-3" />
+                            )}
+                            {stalled ? 'Waiting for the worker' : phase.label}
+                        </ToneBadge>
+                    </div>
+
+                    <p
+                        className={cn(
+                            'flex items-start gap-1.5 text-sm',
+                            problem
+                                ? 'text-muted-foreground'
+                                : 'text-foreground/80',
+                        )}
+                    >
+                        {run.phase === 'blocked' && (
+                            <Ban className="mt-0.5 size-4 shrink-0 text-warning" />
+                        )}
+                        {['empty', 'failed'].includes(run.phase) && (
+                            <AlertTriangle className="mt-0.5 size-4 shrink-0 text-warning" />
+                        )}
+                        {stalled && (
+                            <Clock className="mt-0.5 size-4 shrink-0 text-warning" />
+                        )}
+                        <span suppressHydrationWarning>
+                            {stalled
+                                ? 'The background worker is not running yet — see the note at the top of the page.'
+                                : run.detail}
+                            {!phase.active && run.finished_at && (
+                                <span className="text-muted-foreground">
+                                    {' '}
+                                    · {timeAgo(run.finished_at)}
+                                </span>
+                            )}
+                        </span>
+                    </p>
+
+                    {(run.products > 0 || run.images > 0) && (
+                        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                            <span className="flex items-center gap-1">
+                                <Package className="size-3.5" />
+                                <span className="font-mono text-foreground">
+                                    {formatCount(run.products)}
+                                </span>{' '}
+                                products
+                            </span>
+                            <span className="flex items-center gap-1">
+                                <ImageIcon className="size-3.5" />
+                                <span className="font-mono text-foreground">
+                                    {formatCount(run.images)}
+                                </span>{' '}
+                                pictures
+                            </span>
+                            {run.categories > 0 && (
+                                <span className="flex items-center gap-1">
+                                    <ListChecks className="size-3.5" />
+                                    <span className="font-mono text-foreground">
+                                        {run.categories}
+                                    </span>{' '}
+                                    {run.categories === 1
+                                        ? 'section'
+                                        : 'sections'}
+                                </span>
+                            )}
+                        </div>
+                    )}
+                </div>
+
+                <div className="flex w-full items-center gap-2 sm:w-auto">
+                    {canView && (
+                        <Button asChild variant="outline" size="sm">
+                            <Link href={jobShow(run.job_id!)}>
+                                <Eye />
+                                {run.phase === 'ready'
+                                    ? 'View products'
+                                    : 'See so far'}
+                            </Link>
+                        </Button>
+                    )}
+                    {run.phase === 'ready' && (
+                        <Button
+                            size="sm"
+                            onClick={onDownload}
+                            disabled={preparing}
+                        >
+                            {preparing ? <Spinner /> : <Download />}
+                            {preparing ? 'Preparing…' : 'Download Excel'}
+                        </Button>
+                    )}
+                    {run.phase === 'review' && (
+                        <Button asChild size="sm">
+                            <Link href={discoveryShow(run.id)}>
+                                <ListChecks /> Choose pages
+                            </Link>
+                        </Button>
+                    )}
+                    {problem && (
+                        <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() =>
+                                router.post(
+                                    DiscoveryController.refresh.url(run.id),
+                                    {},
+                                    { preserveScroll: true },
+                                )
+                            }
+                        >
+                            <RefreshCw /> Try again
+                        </Button>
+                    )}
+                    <RunMenu run={run} />
+                </div>
+            </div>
+
+            {phase.active && (
+                <div className="border-t bg-muted/30 px-4 py-3">
+                    <ol className="mb-2 grid grid-cols-4 gap-2 text-[11px] sm:text-xs">
+                        {STEPS.map((s, index) => (
+                            <li
+                                key={s.label}
+                                className={cn(
+                                    'flex items-center gap-1.5 truncate',
+                                    index < step && 'text-success',
+                                    index === step &&
+                                        'font-medium text-primary',
+                                    index > step && 'text-muted-foreground',
+                                )}
+                            >
+                                {index < step ? (
+                                    <Check className="size-3.5 shrink-0" />
+                                ) : index === step && !stalled ? (
+                                    <Spinner className="size-3.5 shrink-0" />
+                                ) : (
+                                    <span className="flex size-3.5 shrink-0 items-center justify-center rounded-full border text-[9px]">
+                                        {index + 1}
+                                    </span>
+                                )}
+                                <span className="truncate">{s.label}</span>
+                            </li>
+                        ))}
+                    </ol>
+                    <div
+                        className="h-1.5 overflow-hidden rounded-full bg-muted"
+                        role="progressbar"
+                        aria-valuenow={run.progress}
+                        aria-valuemin={0}
+                        aria-valuemax={100}
+                        aria-label={`${run.domain} progress`}
+                    >
+                        <div
+                            className="h-full rounded-full bg-linear-to-r from-primary to-fuchsia-500 transition-[width] duration-700"
+                            style={{ width: `${Math.max(run.progress, 3)}%` }}
+                        />
+                    </div>
+                </div>
+            )}
+        </li>
+    );
+}
+
+function RunMenu({ run }: { run: SiteRun }) {
+    const working = PHASES[run.phase].active;
+
+    return (
+        <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    className="ml-auto size-8 sm:ml-0"
+                    aria-label={`More for ${run.domain}`}
+                >
+                    <MoreHorizontal />
+                </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end" className="w-52">
+                <DropdownMenuItem
+                    disabled={working}
+                    onSelect={() =>
+                        router.post(
+                            DiscoveryController.refresh.url(run.id),
+                            {},
+                            { preserveScroll: true },
+                        )
+                    }
+                >
+                    <RefreshCw /> Refresh prices & stock
+                </DropdownMenuItem>
+                <DropdownMenuItem asChild>
+                    <Link href={discoveryShow(run.id)}>
+                        <ListChecks /> Choose pages myself
+                    </Link>
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem
+                    className="text-destructive focus:text-destructive"
+                    onSelect={() =>
+                        router.delete(DiscoveryController.destroy.url(run.id), {
+                            preserveScroll: true,
+                        })
+                    }
+                >
+                    <Trash2 /> Remove from list
+                </DropdownMenuItem>
+            </DropdownMenuContent>
+        </DropdownMenu>
+    );
+}
+
+Websites.layout = {
+    breadcrumbs: [{ title: 'Websites', href: discover() }],
 };

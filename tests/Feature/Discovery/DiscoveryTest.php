@@ -5,11 +5,13 @@ use App\Enums\JobStatus;
 use App\Enums\Platform;
 use App\Enums\RouteSource;
 use App\Jobs\DiscoverDomainJob;
+use App\Jobs\ProcessPageJob;
 use App\Models\Discovery;
 use App\Models\Site;
 use App\Models\User;
 use App\Services\Discovery\DomainDiscoverer;
 use App\Services\Discovery\RouteProber;
+use App\Services\ExtractionService;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Process;
 use Illuminate\Support\Facades\Queue;
@@ -100,17 +102,63 @@ it('starts discovery from the web form', function () {
     $user = User::factory()->create();
 
     $this->actingAs($user)
-        ->post(route('discoveries.store'), ['domain' => 'https://www.Chaldal.com/popular'])
-        ->assertRedirect(route('discoveries.show', Discovery::first()));
+        ->post(route('discoveries.store'), ['domains' => 'https://www.Chaldal.com/popular'])
+        ->assertRedirect(route('discover'));
 
-    expect(Discovery::first()->site->domain)->toBe('chaldal.com');
+    expect(Discovery::first()->site->domain)->toBe('chaldal.com')
+        ->and(Discovery::first()->auto_extract)->toBeTrue();
     Queue::assertPushed(DiscoverDomainJob::class, fn ($job) => $job->domain === 'chaldal.com');
+});
+
+it('starts every website in pasted text and skips one already being collected', function () {
+    Queue::fake();
+    $user = User::factory()->create();
+    $this->actingAs($user)->post(route('discoveries.store'), ['domains' => 'chaldal.com']);
+
+    $this->actingAs($user)
+        ->post(route('discoveries.store'), ['domains' => "https://bongofurniture.com, https://rflbd.com,\nhttps://www.smmbd.com/shop/ chaldal.com"])
+        ->assertRedirect(route('discover'))
+        ->assertSessionHasNoErrors();
+
+    expect(Discovery::with('site')->get()->pluck('site.domain')->all())
+        ->toBe(['chaldal.com', 'bongofurniture.com', 'rflbd.com', 'smmbd.com']);
+    Queue::assertPushed(DiscoverDomainJob::class, 4);
+});
+
+it('names the part of the pasted text that is not a website', function () {
+    $this->actingAs(User::factory()->create())
+        ->post(route('discoveries.store'), ['domains' => 'chaldal.com, hello'])
+        ->assertSessionHasErrors(['domains' => '“hello” doesn\'t look like a website address. Try something like chaldal.com.']);
+
+    expect(Discovery::count())->toBe(0);
+});
+
+it('extracts the recommended routes on its own after discovering a pasted website', function () {
+    Http::fake([
+        'chaldal.com/robots.txt' => Http::response('', 404),
+        'chaldal.com/sitemap.xml' => Http::response('', 404),
+        'chaldal.com/sitemap_index.xml' => Http::response('', 404),
+        'chaldal.com/' => Http::response(page('discovery-home.html')),
+        'chaldal.com/popular' => Http::response(page('chaldal-popular.html')),
+        'chaldal.com/fresh-vegetables' => Http::response(page('discovery-vegetables.html')),
+        'chaldal.com/*' => Http::response('<html><body><p>Nothing here</p></body></html>'),
+    ]);
+    Queue::fake();
+
+    $discovery = Discovery::factory()->for(Site::forHost('chaldal.com'))->create(['auto_extract' => true]);
+    (new DiscoverDomainJob($discovery->id, 'chaldal.com'))->handle(app(DomainDiscoverer::class), app(ExtractionService::class));
+
+    $job = $discovery->fresh()->latestJob;
+    $paths = $job->targets()->pluck('url')->map(fn ($url) => parse_url($url, PHP_URL_PATH))->sort()->values()->all();
+
+    expect($paths)->toBe(['/fresh-vegetables', '/popular']);
+    Queue::assertPushed(ProcessPageJob::class, 2);
 });
 
 it('rejects input that is not a domain', function () {
     $this->actingAs(User::factory()->create())
-        ->post(route('discoveries.store'), ['domain' => 'hello world'])
-        ->assertSessionHasErrors('domain');
+        ->post(route('discoveries.store'), ['domains' => 'hello world'])
+        ->assertSessionHasErrors('domains');
 });
 
 it('ignores product counts hidden in scripts and on pages without products', function () {

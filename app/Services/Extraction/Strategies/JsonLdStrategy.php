@@ -132,6 +132,7 @@ final class JsonLdStrategy implements Strategy
             'brand' => $node['brand'] ?? null,
             'availability' => $availability,
             'category' => is_string($node['category'] ?? null) ? $node['category'] : null,
+            'description' => is_string($node['description'] ?? null) ? $node['description'] : null,
             'currency' => is_string($currency) ? $currency : null,
         ];
     }

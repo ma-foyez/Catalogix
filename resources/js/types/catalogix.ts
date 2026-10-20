@@ -27,6 +27,41 @@ export type QueueStall = {
 
 export type ScoreLabel = 'high' | 'medium' | 'low' | 'none';
 
+export type RunPhase =
+    | 'waiting'
+    | 'finding'
+    | 'collecting'
+    | 'images'
+    | 'ready'
+    | 'review'
+    | 'empty'
+    | 'blocked'
+    | 'failed';
+
+/** One website as the Websites page shows it, from "waiting" to "ready". */
+export type SiteRun = {
+    id: number;
+    domain: string;
+    phase: RunPhase;
+    detail: string;
+    progress: number;
+    stage: DiscoveryStage;
+    stage_label: string;
+    probed: number;
+    to_probe: number;
+    job_id: number | null;
+    products: number;
+    images: number;
+    images_pending: number;
+    images_failed: number;
+    categories: number;
+    categories_done: number;
+    is_blocked: boolean;
+    auto: boolean;
+    created_at: string | null;
+    finished_at: string | null;
+};
+
 export type DiscoveredRoute = {
     id: number;
     url: string;
@@ -51,6 +86,7 @@ export type Discovery = {
         is_blocked: boolean;
         blocked_reason: string | null;
     };
+    auto_extract: boolean;
     status: RunStatus;
     stage: DiscoveryStage;
     stage_label: string;
@@ -112,6 +148,9 @@ export type Product = {
     sale_price: number | null;
     currency: string;
     category: string | null;
+    subcategory: string | null;
+    description: string | null;
+    discount_percent: number | null;
     site: string;
     in_stock: boolean | null;
     product_url: string | null;

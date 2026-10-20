@@ -23,6 +23,8 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property CarbonImmutable|null $started_at
  * @property CarbonImmutable|null $finished_at
  * @property-read Discovery|null $discovery
+ * @property-read int|null $targets_count
+ * @property-read int|null $finished_targets_count
  */
 #[Fillable([
     'user_id', 'discovery_id', 'status', 'total_routes', 'total_products',
@@ -69,6 +71,26 @@ class ScrapeJob extends Model
     public function site(): ?Site
     {
         return $this->discovery?->site;
+    }
+
+    /**
+     * Image downloads of this job's products by status.
+     *
+     * @return array{pending: int, downloaded: int, failed: int}
+     */
+    public function imageStats(): array
+    {
+        $counts = ProductImage::query()
+            ->whereHas('product.scrapeTargets', fn ($query) => $query->where('scrape_targets.scrape_job_id', $this->id))
+            ->selectRaw('status, count(*) as aggregate')
+            ->groupBy('status')
+            ->pluck('aggregate', 'status');
+
+        return [
+            'pending' => (int) ($counts['pending'] ?? 0),
+            'downloaded' => (int) ($counts['downloaded'] ?? 0),
+            'failed' => (int) ($counts['failed'] ?? 0),
+        ];
     }
 
     /**

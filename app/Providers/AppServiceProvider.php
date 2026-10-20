@@ -43,8 +43,8 @@ class AppServiceProvider extends ServiceProvider
         Event::listen(JobPopping::class, fn (JobPopping $event) => QueueHealth::heartbeat($event->queue));
 
         // The framework default listens on "default" only, where Catalogix sends nothing.
-        DevCommands::artisan('queue:listen --queue=discovery,pages,exports,default --timeout=0', 'queue');
-        DevCommands::artisan('queue:listen --queue=images,exports --timeout=0', 'images');
+        DevCommands::artisan('queue:listen --queue=pages,discovery,exports,default --timeout=0', 'queue');
+        DevCommands::artisan('queue:listen --queue=exports,images --timeout=0', 'images');
     }
 
     /**

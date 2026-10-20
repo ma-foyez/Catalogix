@@ -18,11 +18,16 @@ it('renders every page of the app', function () {
     $user = User::factory()->create();
     $target = makeTarget('https://chaldal.com/popular', 'Popular');
     $target->scrapeJob->update(['user_id' => $user->id]);
-    $target->scrapeJob->discovery->update(['user_id' => $user->id]);
+    $target->scrapeJob->discovery->update(['user_id' => $user->id, 'status' => 'done', 'stage' => 'finished']);
 
     $this->actingAs($user);
 
-    $this->get('/discover')->assertInertia(fn (Assert $page) => $page->component('discover/index')->has('recent', 1));
+    $this->get('/discover')->assertInertia(fn (Assert $page) => $page
+        ->component('discover/index')
+        ->has('runs.data', 1)
+        ->where('runs.data.0.domain', 'chaldal.com')
+        ->where('runs.data.0.phase', 'collecting')
+        ->where('runs.data.0.job_id', $target->scrape_job_id));
     $this->get(route('discoveries.show', $target->scrapeJob->discovery))->assertInertia(fn (Assert $page) => $page->component('discover/show')->has('discovery.routes', 1));
     $this->get('/jobs')->assertInertia(fn (Assert $page) => $page->component('jobs/index')->has('jobs.data', 1));
     $this->get(route('jobs.show', $target->scrapeJob))->assertInertia(fn (Assert $page) => $page

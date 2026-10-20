@@ -6,10 +6,10 @@ use App\Services\Crawling\UrlTools;
 
 /**
  * Turns the loose product arrays every strategy produces into one clean shape:
- * name, price, sale_price, currency, product_url, image_url, sku, brand, in_stock, category, hash, raw.
+ * name, price, sale_price, currency, product_url, image_url, sku, brand, in_stock, category, description, hash, raw.
  *
  * Raw input keys understood: name, price, regular_price, sale_price, prices (list), image, images,
- * url, sku, brand, in_stock, availability, category, currency.
+ * url, sku, brand, in_stock, availability, category, description, currency.
  */
 final class ProductNormalizer
 {
@@ -44,6 +44,7 @@ final class ProductNormalizer
             'brand' => $this->cleanText(is_array($raw['brand'] ?? null) ? ($raw['brand']['name'] ?? null) : ($raw['brand'] ?? null), 190),
             'in_stock' => $this->stock($raw['in_stock'] ?? ($raw['availability'] ?? null)),
             'category' => $category ?? $this->cleanText($raw['category'] ?? null, 190),
+            'description' => $this->cleanText($raw['description'] ?? null, 2000),
             'hash' => $productUrl !== null
                 ? sha1($productUrl)
                 : sha1(mb_strtolower($name).'|'.($price ?? '').'|'.($imageUrl ?? '')),

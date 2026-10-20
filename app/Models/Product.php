@@ -13,6 +13,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $id
  * @property int $site_id
  * @property int|null $category_id
+ * @property string|null $subcategory
+ * @property string|null $description
  * @property string $hash
  * @property string $name
  * @property string|null $price
@@ -30,11 +32,23 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read ProductImage|null $image
  */
 #[Fillable([
-    'site_id', 'category_id', 'hash', 'name', 'price', 'sale_price', 'currency',
-    'product_url', 'sku', 'brand', 'in_stock', 'raw', 'first_seen_at', 'last_seen_at',
+    'site_id', 'category_id', 'subcategory', 'hash', 'name', 'price', 'sale_price', 'currency',
+    'product_url', 'sku', 'brand', 'description', 'in_stock', 'raw', 'first_seen_at', 'last_seen_at',
 ])]
 class Product extends Model
 {
+    /**
+     * Whole-number saving of the sale price against the regular price, e.g. 35 for ৳230 → ৳149.
+     */
+    public function discountPercent(): ?int
+    {
+        if ($this->price === null || $this->sale_price === null || (float) $this->price <= 0) {
+            return null;
+        }
+
+        return (int) round((1 - (float) $this->sale_price / (float) $this->price) * 100);
+    }
+
     protected function casts(): array
     {
         return [

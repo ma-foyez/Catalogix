@@ -11,11 +11,13 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 /**
  * @property int $id
  * @property int $user_id
  * @property int $site_id
+ * @property bool $auto_extract
  * @property JobStatus $status
  * @property DiscoveryStage $stage
  * @property int $candidates
@@ -26,8 +28,10 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
  * @property CarbonImmutable|null $started_at
  * @property CarbonImmutable|null $finished_at
  * @property-read Site $site
+ * @property-read User $user
+ * @property-read ScrapeJob|null $latestJob
  */
-#[Fillable(['user_id', 'site_id', 'status', 'stage', 'candidates', 'probed', 'to_probe', 'routes_found', 'error', 'started_at', 'finished_at'])]
+#[Fillable(['user_id', 'site_id', 'auto_extract', 'status', 'stage', 'candidates', 'probed', 'to_probe', 'routes_found', 'error', 'started_at', 'finished_at'])]
 class Discovery extends Model
 {
     /** @use HasFactory<DiscoveryFactory> */
@@ -35,6 +39,7 @@ class Discovery extends Model
 
     /** @var array<string, mixed> */
     protected $attributes = [
+        'auto_extract' => false,
         'stage' => 'waiting',
         'candidates' => 0,
         'probed' => 0,
@@ -45,6 +50,7 @@ class Discovery extends Model
     protected function casts(): array
     {
         return [
+            'auto_extract' => 'boolean',
             'status' => JobStatus::class,
             'stage' => DiscoveryStage::class,
             'started_at' => 'datetime',
@@ -74,5 +80,16 @@ class Discovery extends Model
     public function scrapeJobs(): HasMany
     {
         return $this->hasMany(ScrapeJob::class);
+    }
+
+    /** @return HasOne<ScrapeJob, $this> */
+    public function latestJob(): HasOne
+    {
+        return $this->hasOne(ScrapeJob::class)->latestOfMany();
+    }
+
+    public function isActive(): bool
+    {
+        return ! $this->status->isFinished() || ($this->latestJob !== null && ! $this->latestJob->status->isFinished());
     }
 }

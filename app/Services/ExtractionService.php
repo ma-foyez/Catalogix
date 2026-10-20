@@ -12,6 +12,7 @@ use App\Models\Discovery;
 use App\Models\ProductImage;
 use App\Models\ScrapeJob;
 use App\Models\User;
+use App\Services\Crawling\UrlTools;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -57,6 +58,35 @@ final class ExtractionService
         }
 
         return $job;
+    }
+
+    /**
+     * Extract what discovery recommends without asking: the high-score routes (the home page only
+     * when nothing else qualifies), falling back to routes that showed at least one product.
+     * Returns null when no route showed products.
+     */
+    public function startRecommended(Discovery $discovery): ?ScrapeJob
+    {
+        $routes = $discovery->routes()->get();
+        $limit = (int) config('catalogix.auto_extract.max_routes', 25);
+
+        $pick = fn (int $minScore, bool $withHome) => $routes
+            ->filter(fn (DiscoveredRoute $route) => $route->score >= $minScore && ($withHome || ! UrlTools::isHomePage($route->url)))
+            ->take($limit);
+
+        $chosen = $pick(DiscoveredRoute::HIGH_SCORE, false);
+
+        foreach ([[30, false], [30, true]] as [$minScore, $withHome]) {
+            if ($chosen->isEmpty()) {
+                $chosen = $pick($minScore, $withHome);
+            }
+        }
+
+        if ($chosen->isEmpty()) {
+            return null;
+        }
+
+        return $this->start($discovery->user, $discovery, array_values($chosen->pluck('id')->map(fn ($id) => (int) $id)->all()));
     }
 
     /**

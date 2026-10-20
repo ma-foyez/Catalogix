@@ -1,17 +1,19 @@
 # Catalogix
 
-Type a shop's domain, tick the routes that list products, and get every product — name, price, sale price, category, stock, link and a locally stored image — in a live listing you can export as Excel (with pictures in the cells), CSV or an images ZIP.
+Paste one or more shop addresses and Catalogix does the rest: it finds the pages that list products, collects every product — name, SKU, brand, category, subcategory, price, sale price, stock, description, link — saves each picture locally, and offers a one-click Excel file with the pictures in the rows. No ticking, no settings; each website shows in plain words what is happening until it is **Ready**.
 
 The source of truth for scope is [docs/Catalogix — Domain Discovery, Local Images & Excel Export.md](docs/Catalogix%20—%20Domain%20Discovery,%20Local%20Images%20&%20Excel%20Export.md). There is no AI and no paid service; one Laravel app does everything, with a small Python + Playwright helper for JavaScript-heavy pages.
 
 ## How it works
 
-1. **Discover** (`DiscoverDomainJob`) — reads `robots.txt` sitemaps and `sitemap.xml`, the WooCommerce / Shopify category list, and the site menu two levels deep; filters by URL pattern; probes each candidate and scores it (0–100) with an estimated product count and three sample images. High-score routes are pre-ticked.
+The **Websites** page takes one address or many (commas, spaces or new lines; full links are fine, `www.` and paths are dropped, duplicates merged, up to 20 at a time). Each website then runs through the steps below on its own and shows one of: *Waiting · Finding products · Collecting products · Saving pictures · Ready* (or *No products found · Website blocked us · Couldn't finish*, with **Try again**). Ready websites offer **View products** (with a details panel per product) and **Download Excel**. *Choose pages myself* (in the ⋯ menu) still opens the scored route checklist for people who want control.
+
+1. **Discover** (`DiscoverDomainJob`) — reads `robots.txt` sitemaps and `sitemap.xml`, the WooCommerce / Shopify category list, and the site menu two levels deep; filters by URL pattern; probes each candidate and scores it (0–100) with an estimated product count and three sample images. Websites added from the app then extract the recommended routes automatically: every route scoring ≥ 60 except the home page, else every route ≥ 30, up to `CATALOGIX_AUTO_MAX_ROUTES`.
 2. **Extract** (`ProcessPageJob`, one page at a time per domain, 1–3 s apart) — runs the no-AI ladder and stops at the first strategy with ≥ 3 priced products:
    saved recipe → JSON-LD / microdata → platform API → embedded state JSON → captured network JSON (Python helper) → automatic card detection.
    The winner is remembered on the site; card detection also saves its selectors as a recipe, so the next run starts at step 1. Pagination follows the recipe's Next, `rel=next`, common Next links, `?page=N` or the platform API's page, until a page adds nothing new or `CATALOGIX_MAX_PAGES` is reached.
 3. **Images** (`DownloadImageJob`, at most 4 at a time per site) — validated, deduplicated by URL, stored as `storage/app/public/products/{domain}/{category}/{product}.webp` plus a 200 px `_thumb.jpg`.
-4. **Export** (`ExportProductsJob`) — CSV, XLSX, XLSX with thumbnails anchored in column A, or an images ZIP; above 3,000 rows Excel-with-images splits into files per site / category / part inside a ZIP. Links are signed for 24 hours.
+4. **Export** (`ExportProductsJob`) — **Download Excel** is one click: Excel with the picture in column A of every row, then Name · SKU · Brand · Category · Subcategory · Price · Sale price · Discount · Stock · Description · Product link (clickable). Other formats: Excel or CSV with picture links instead of pictures (plus the local image path), or a pictures ZIP; above 3,000 rows Excel-with-images splits into files per site / category / part inside a ZIP. Links are signed for 24 hours.
 5. **Visual recipe picker** (admins) — for layouts the ladder can't read: click a name, price, image and Next on the real page, preview every match, save.
 
 Live progress uses Reverb (`RoutesDiscovered`, `ProductsFound`, `ScrapeProgress`, `ImageDownloaded`, `ExportReady`); API clients poll.
@@ -84,7 +86,7 @@ Or run the pieces yourself:
 php artisan serve                     # http://localhost:8000
 npm run dev                           # Vite (or rely on npm run build)
 php artisan reverb:start              # live updates on :8080 (optional: pages poll without it)
-php artisan queue:work --queue=discovery,pages,images,exports,default --timeout=960
+php artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960
 ```
 
 Without a queue worker nothing runs: discoveries stay at "Waiting for a worker" and the app shows a banner with the command to start one. A plain `queue:work` or `queue:listen` only listens on the `default` queue, where Catalogix sends nothing — always pass `--queue=…`. Restart workers after changing PHP code (`php artisan queue:restart`); they keep the old code in memory.
@@ -116,7 +118,7 @@ Sanctum tokens, same features as the web app. All routes except `POST /api/token
 | Method | Endpoint | Does |
 | --- | --- | --- |
 | POST | `/api/tokens` `{email, password, device_name}` | Issues a token |
-| POST | `/api/discoveries` `{domain}` | Starts discovery → `202` with the discovery |
+| POST | `/api/discoveries` `{domain}` or `{domains: [...]}`, optional `auto_extract` | Starts discovery → `202` with the discovery (or a list). With `auto_extract: true` the recommended routes are extracted automatically, as in the web app |
 | GET | `/api/discoveries/{id}` | Status + routes (score, est. products, sample images) |
 | POST | `/api/discoveries/{id}/extract` `{route_ids[]}` | Starts extraction → `202` with the job |
 | GET | `/api/jobs/{id}` | Status, per-route progress, product counts, image counts |
@@ -154,7 +156,7 @@ No test touches a real site or the Python helper: HTTP is faked with saved HTML/
 
   ```ini
   [program:catalogix-worker]
-  command=php /var/www/catalogix/artisan queue:work --queue=discovery,pages,images,exports,default --timeout=960 --sleep=1
+  command=php /var/www/catalogix/artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960 --sleep=1
   numprocs=3
   process_name=%(program_name)s_%(process_num)02d
   autorestart=true
@@ -165,11 +167,16 @@ No test touches a real site or the Python helper: HTTP is faked with saved HTML/
   autorestart=true
   ```
 
-  On Windows: `nssm install CatalogixWorker C:\laragon\bin\php\php-8.4.24\php.exe "artisan queue:work --queue=discovery,pages,images,exports,default --timeout=960"` with the app folder as the startup directory; repeat for `reverb:start`.
+  On Windows: `nssm install CatalogixWorker C:\laragon\bin\php\php-8.4.24\php.exe "artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960"` with the app folder as the startup directory; repeat for `reverb:start`.
 - Schedule `php artisan schedule:run` every minute (cron or Windows Task Scheduler): it removes expired export files hourly and prunes week-old failed jobs.
 - Product images belong to the source sites: fine for internal research or with the supplier's agreement, not for commercial republishing without permission.
 
 ## Decisions beyond the spec
+
+- **Automatic flow for the web app**: the spec has users tick routes; the Websites page now discovers *and* extracts on its own (the checklist stays one click away). The REST API keeps the tick-routes flow unless `auto_extract: true` is sent.
+- **Excel with pictures drops the image URL and local path columns** (the picture itself is there); CSV and plain Excel keep them. Added SKU, Brand, Subcategory, Discount and Description columns.
+- **Category and subcategory**: a nested category page (`/product-category/furniture/chairs/`) gives *Furniture › Chairs*; a one-level page uses its name as category and the product's own category (WooCommerce, Shopify `product_type`, JSON-LD) as subcategory. The home page never labels products "Home": they keep their own category, or the one a category page gave them.
+- **Description** comes from what listings already carry (WooCommerce short description, Shopify `body_html`, JSON-LD, embedded state). Product detail pages are not visited, so sites whose listings show no description leave it empty.
 
 - **Image rows**: `product_images` is unique on `(product_id, url_hash)` with an index on `url_hash`, instead of unique on `url_hash` alone, so several products can share one picture; the file is still downloaded only once and reused.
 - **Links are optional for cards**: Chaldal's cards open products in a modal and have no link, so card detection needs an image and a price; links break ties.
