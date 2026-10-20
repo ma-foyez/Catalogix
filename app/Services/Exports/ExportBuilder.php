@@ -187,6 +187,7 @@ final class ExportBuilder
         };
 
         $suffix = $export->format === ExportFormat::ZipImages ? '-images' : ($export->format === ExportFormat::XlsxImages ? '-with-images' : '');
+        $suffix .= isset($scope['product_ids']) ? '-selected' : (isset($scope['filters']) ? '-filtered' : '');
 
         return 'catalogix-'.$this->fileSafe($label).$suffix.'-'.now()->format('Ymd-His').'-'.$export->id;
     }

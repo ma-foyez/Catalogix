@@ -5,6 +5,7 @@ namespace App\Services\Exports;
 use App\Enums\ExportScope;
 use App\Models\Export;
 use App\Models\Product;
+use App\Services\JobProductsQuery;
 use Illuminate\Database\Eloquent\Builder;
 
 /**
@@ -40,6 +41,19 @@ final class ExportProductQuery
 
         if (! empty($scope['category_id'])) {
             $query->where('products.category_id', (int) $scope['category_id']);
+        }
+
+        if (isset($scope['product_ids'])) {
+            $query->whereIn('products.id', $scope['product_ids']);
+        }
+
+        if (! empty($scope['excluded_product_ids'])) {
+            $query->whereNotIn('products.id', $scope['excluded_product_ids']);
+        }
+
+        if (! empty($scope['filters']) && $export->scrapeJob !== null) {
+            $filtered = app(JobProductsQuery::class)->for($export->scrapeJob, $scope['filters']);
+            $query->whereIn('products.id', $filtered->reorder()->select('products.id'));
         }
 
         return $query->orderBy('products.site_id')->orderBy('products.category_id')->orderBy('products.id');

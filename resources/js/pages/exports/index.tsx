@@ -124,7 +124,13 @@ export default function ExportsIndex({
                                                 </p>
                                             </TableCell>
                                             <TableCell className="text-sm">
-                                                {SCOPE_LABELS[file.scope.type]}
+                                                {file.scope.product_ids
+                                                    ? `Selected (${formatCount(file.scope.product_ids.length)})`
+                                                    : file.scope.filters
+                                                      ? 'Filtered products'
+                                                      : SCOPE_LABELS[
+                                                            file.scope.type
+                                                        ]}
                                             </TableCell>
                                             <TableCell className="text-right font-mono text-sm tabular-nums">
                                                 {formatCount(file.row_count)}

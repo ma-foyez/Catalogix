@@ -1,51 +1,57 @@
 import { ImageOff, Loader2 } from 'lucide-react';
 import { cn } from '@/lib/utils';
+import { useState } from 'react';
 import type { ProductImage } from '@/types/catalogix';
 
 /**
- * The product's local thumbnail; clicking opens the full local image.
- * Shows a spinner while the download is pending and a crossed icon when it failed.
+ * Opens an in-page preview, using the source picture until the local thumbnail is ready.
  */
 export function ProductThumb({
     image,
     name,
     className,
+    onPreview,
 }: {
     image: ProductImage | null;
     name: string;
     className?: string;
+    onPreview: () => void;
 }) {
+    const [failedSource, setFailedSource] = useState<string | null>(null);
+    const source = image?.thumb_url ?? image?.url ?? image?.source_url;
     const box = cn(
         'flex size-12 shrink-0 items-center justify-center overflow-hidden rounded-md border bg-muted',
         className,
     );
 
-    if (image?.status === 'downloaded' && image.thumb_url) {
+    if (source && failedSource !== source) {
         return (
-            <a
-                href={image.url ?? image.thumb_url}
-                target="_blank"
-                rel="noreferrer"
+            <button
+                type="button"
+                onClick={onPreview}
+                aria-label={`Preview image of ${name}`}
                 className={cn(
                     box,
                     'focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
                 )}
             >
                 <img
-                    src={image.thumb_url}
+                    src={source}
+                    referrerPolicy="no-referrer"
+                    onError={() => setFailedSource(source)}
                     alt={name}
                     loading="lazy"
                     className="size-full object-cover"
                 />
-            </a>
+            </button>
         );
     }
 
-    if (image?.status === 'failed') {
+    if (image?.status === 'failed' || (source && failedSource === source)) {
         return (
             <span
                 className={cn(box, 'text-muted-foreground')}
-                title={image.error ?? 'Image download failed'}
+                title={image?.error ?? 'The image preview could not be loaded'}
             >
                 <ImageOff className="size-4" aria-label="Image failed" />
             </span>

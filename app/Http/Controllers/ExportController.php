@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use App\Enums\ExportFormat;
 use App\Enums\ExportLayout;
 use App\Enums\ExportScope;
+use App\Http\Requests\QuickExportRequest;
 use App\Http\Requests\StoreExportRequest;
 use App\Http\Resources\ExportResource;
 use App\Models\Export;
@@ -43,11 +44,12 @@ class ExportController extends Controller
      * One click from a site card or the products page: Excel with pictures, one sheet. The page
      * then polls status() and downloads the file as soon as it is ready.
      */
-    public function quick(Request $request, ScrapeJob $job, ExportService $exports): JsonResponse
+    public function quick(QuickExportRequest $request, ScrapeJob $job, ExportService $exports): JsonResponse
     {
         Gate::authorize('view', $job);
 
         $export = $exports->create($request->user(), [
+            ...$request->validated(),
             'scope' => ExportScope::Site->value,
             'job_id' => $job->id,
             'format' => ExportFormat::XlsxImages->value,

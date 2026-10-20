@@ -231,3 +231,90 @@ it('makes a one-click Excel with pictures and reports when it can be downloaded'
     $this->actingAs(User::factory()->create())->postJson(route('jobs.excel', $job))->assertForbidden();
     $this->getJson(route('exports.status', Export::sole()))->assertForbidden();
 });
+
+it('exports only checked products with pictures through the one-click endpoint', function () {
+    $job = jobWithProducts($this->user, 'chaldal.com', 4);
+    $ids = Product::orderBy('id')->pluck('id')->all();
+    $selected = [$ids[0], $ids[2]];
+
+    $this->actingAs($this->user)->postJson(route('jobs.excel', $job), ['product_ids' => $selected])
+        ->assertAccepted()->assertJsonPath('data.scope.product_ids', $selected);
+    runQueuedJobs(ExportProductsJob::class, 1);
+    $export = Export::sole();
+    $sheet = IOFactory::load(Storage::disk('local')->path($export->file_path))->getSheet(0);
+
+    expect($export->row_count)->toBe(2)
+        ->and($sheet->getCell('B2')->getValue())->toBe('Miniket Rice 1 kg')
+        ->and($sheet->getCell('B3')->getValue())->toBe('Miniket Rice 3 kg')
+        ->and($sheet->getDrawingCollection()->count())->toBe(2);
+});
+
+it('exports checked products in CSV and image ZIP formats', function ($format) {
+    $job = jobWithProducts($this->user, 'chaldal.com', 3);
+    $id = Product::orderBy('id')->skip(1)->first()->id;
+    $this->actingAs($this->user)->post(route('exports.store'), [
+        'scope' => 'site', 'job_id' => $job->id, 'format' => $format, 'product_ids' => [$id],
+    ])->assertSessionHasNoErrors();
+    runQueuedJobs(ExportProductsJob::class, 1);
+    $export = Export::sole();
+    expect($export->row_count)->toBe(1);
+
+    if ($format === 'csv') {
+        expect(Storage::disk('local')->get($export->file_path))->toContain('Miniket Rice 2 kg')->not->toContain('Miniket Rice 1 kg');
+    } else {
+        $zip = new ZipArchive;
+        $zip->open(Storage::disk('local')->path($export->file_path));
+        expect($zip->numFiles)->toBe(1)->and($zip->getNameIndex(0))->toBe('chaldal.com/popular/rice-2.webp');
+        $zip->close();
+    }
+})->with(['csv', 'zip_images']);
+
+it('exports all filtered matches with exclusions across pagination', function () {
+    $job = jobWithProducts($this->user, 'chaldal.com', 55);
+    $ids = Product::orderBy('id')->pluck('id');
+    $this->actingAs($this->user)->postJson(route('jobs.excel', $job), [
+        'filters' => ['route' => (string) $job->targets()->first()->id, 'search' => 'Rice', 'image' => 'downloaded'],
+        'excluded_product_ids' => [$ids[0], $ids[54]],
+    ])->assertAccepted();
+    runQueuedJobs(ExportProductsJob::class, 1);
+    expect(Export::sole()->row_count)->toBe(53);
+});
+
+it('rejects foreign product IDs and collections in selection exports', function () {
+    $job = jobWithProducts($this->user, 'chaldal.com', 2);
+    $other = jobWithProducts(User::factory()->create(), 'shop.test', 1);
+    $foreignId = Product::where('site_id', $other->site()->id)->value('id');
+
+    $this->actingAs($this->user)->postJson(route('jobs.excel', $job), ['product_ids' => [$foreignId]])
+        ->assertUnprocessable()->assertJsonValidationErrors('product_ids');
+    $this->postJson(route('api.exports.store'), ['scope' => 'site', 'job_id' => $job->id, 'format' => 'csv', 'product_ids' => [$foreignId]])
+        ->assertUnprocessable()->assertJsonValidationErrors('product_ids');
+    $this->postJson(route('jobs.excel', $job), ['filters' => ['route' => $other->targets()->first()->id]])
+        ->assertUnprocessable()->assertJsonValidationErrors('filters.route');
+    $this->postJson(route('jobs.excel', $job), ['product_ids' => []])
+        ->assertUnprocessable()->assertJsonValidationErrors('product_ids');
+    expect(Export::count())->toBe(0);
+});
+
+it('does not duplicate products or pictures when website collections overlap', function () {
+    $job = jobWithProducts($this->user, 'chaldal.com', 3);
+    $other = $job->targets()->create(['url' => 'https://chaldal.com/home-furniture', 'status' => 'done']);
+    $other->products()->attach(Product::pluck('id'));
+    $export = runExport($this->user, ['scope' => 'site', 'job_id' => $job->id, 'format' => 'zip_images']);
+    $zip = new ZipArchive;
+    $zip->open(Storage::disk('local')->path($export->file_path));
+    expect($export->row_count)->toBe(3)->and($zip->numFiles)->toBe(3);
+    $zip->close();
+});
+
+it('packs a reused local picture once even when products have different categories', function () {
+    $job = jobWithProducts($this->user, 'chaldal.com', 2);
+    $products = Product::with('image')->orderBy('id')->get();
+    $products[1]->forceFill(['category_id' => Category::resolve($job->site(), 'Home Furniture')->id])->save();
+    $products[1]->image->forceFill(['local_path' => $products[0]->image->local_path])->save();
+    $export = runExport($this->user, ['scope' => 'site', 'job_id' => $job->id, 'format' => 'zip_images']);
+    $zip = new ZipArchive;
+    $zip->open(Storage::disk('local')->path($export->file_path));
+    expect($export->row_count)->toBe(2)->and($zip->numFiles)->toBe(1);
+    $zip->close();
+});

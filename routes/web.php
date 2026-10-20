@@ -3,6 +3,7 @@
 use App\Http\Controllers\CollectionControlController;
 use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\ExportController;
+use App\Http\Controllers\ProductImageController;
 use App\Http\Controllers\RecipeController;
 use App\Http\Controllers\ScrapeJobController;
 use App\Http\Controllers\SiteController;
@@ -30,6 +31,7 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::delete('discoveries/{discovery}', [DiscoveryController::class, 'destroy'])->name('discoveries.destroy');
 
     Route::get('jobs', [ScrapeJobController::class, 'index'])->name('jobs.index');
+    Route::get('images/{image}/download', [ProductImageController::class, 'download'])->name('images.download');
     Route::get('jobs/{job}', [ScrapeJobController::class, 'show'])->name('jobs.show');
     Route::post('jobs/{job}/rerun', [ScrapeJobController::class, 'rerun'])->name('jobs.rerun');
     Route::post('jobs/{job}/images/retry', [ScrapeJobController::class, 'retryImages'])->name('jobs.images.retry');

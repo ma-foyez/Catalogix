@@ -15,7 +15,7 @@ use Illuminate\Support\Facades\URL;
  * @property int $id
  * @property int $user_id
  * @property int|null $scrape_job_id
- * @property array{type: string, scrape_job_id?: int, scrape_target_id?: int, category_id?: int} $scope
+ * @property array{type: string, scrape_job_id?: int, scrape_target_id?: int, category_id?: int, product_ids?: list<int>, excluded_product_ids?: list<int>, filters?: array{route?: int|string|null, category?: int|string|null, search?: string|null, image?: string|null}} $scope
  * @property ExportFormat $format
  * @property ExportLayout $layout
  * @property string|null $file_path

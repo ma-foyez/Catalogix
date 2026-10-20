@@ -18,6 +18,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
  * @property ExtractionStrategy|null $strategy_used
  * @property int $pages_crawled
  * @property int $products_found
+ * @property-read int|null $products_count
  * @property string|null $error
  * @property-read ScrapeJob $scrapeJob
  * @property-read DiscoveredRoute|null $discoveredRoute

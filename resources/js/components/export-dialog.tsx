@@ -20,6 +20,8 @@ import type {
     ExportFormat,
     ExportLayout,
     ExportScope,
+    ExportSelection,
+    ProductFilters,
     ScrapeTarget,
 } from '@/types/catalogix';
 
@@ -36,14 +38,24 @@ export function ExportDialog({
     domain,
     route,
     totalProducts,
+    selectedCount = 0,
+    selection,
+    filters,
+    filteredCount,
 }: {
     jobId: number;
     domain: string | null;
     route: ScrapeTarget | null;
     totalProducts: number;
+    selectedCount?: number;
+    selection?: ExportSelection;
+    filters: ProductFilters;
+    filteredCount: number;
 }) {
     const [open, setOpen] = useState(false);
-    const [scope, setScope] = useState<ExportScope>(route ? 'route' : 'site');
+    const [scope, setScope] = useState<ExportScope | 'selected' | 'filtered'>(
+        'site',
+    );
     const [format, setFormat] = useState<ExportFormat>('xlsx_images');
     const [layout, setLayout] = useState<ExportLayout>('per_site');
     const [submitting, setSubmitting] = useState(false);
@@ -53,11 +65,16 @@ export function ExportDialog({
         router.post(
             ExportController.store.url(),
             {
-                scope,
+                scope:
+                    scope === 'selected' || scope === 'filtered'
+                        ? 'site'
+                        : scope,
                 format,
                 layout,
                 job_id: scope === 'all' ? null : jobId,
                 route_id: scope === 'route' ? route?.id : null,
+                ...(scope === 'selected' ? selection : {}),
+                ...(scope === 'filtered' ? { filters } : {}),
             },
             {
                 preserveScroll: true,
@@ -68,15 +85,21 @@ export function ExportDialog({
     };
 
     return (
-        <Dialog open={open} onOpenChange={setOpen}>
+        <Dialog
+            open={open}
+            onOpenChange={(next) => {
+                if (next) setScope(selectedCount > 0 ? 'selected' : 'site');
+                setOpen(next);
+            }}
+        >
             <DialogTrigger asChild>
                 <Button variant="outline" disabled={totalProducts === 0}>
-                    <FileDown /> Other formats
+                    <FileDown /> Export options
                 </Button>
             </DialogTrigger>
             <DialogContent className="sm:max-w-lg">
                 <DialogHeader>
-                    <DialogTitle>Download in another format</DialogTitle>
+                    <DialogTitle>Export products</DialogTitle>
                     <DialogDescription>
                         The file is prepared in the background and appears under
                         Downloads, where it can be downloaded for 24 hours.
@@ -92,11 +115,21 @@ export function ExportDialog({
                             onChange={setScope}
                             options={[
                                 {
+                                    value: 'selected',
+                                    label: `Selected (${formatCount(selectedCount)})`,
+                                    disabled: selectedCount === 0,
+                                },
+                                {
+                                    value: 'filtered',
+                                    label: `Filtered (${formatCount(filteredCount)})`,
+                                    disabled: filteredCount === 0,
+                                },
+                                {
                                     value: 'route',
                                     label: 'This section',
                                     disabled: route === null,
                                 },
-                                { value: 'site', label: domain ?? 'This site' },
+                                { value: 'site', label: 'All products' },
                                 { value: 'all', label: 'All websites' },
                             ]}
                         />
@@ -105,9 +138,13 @@ export function ExportDialog({
                                 route &&
                                 `${route.category ?? route.url} · ${formatCount(route.products_found)} products`}
                             {scope === 'site' &&
-                                `Everything collected from this website · ${formatCount(totalProducts)} products`}
+                                `Everything collected from ${domain ?? 'this website'} · ${formatCount(totalProducts)} products`}
                             {scope === 'all' &&
                                 'Every product from all your websites'}
+                            {scope === 'selected' &&
+                                `Only the ${formatCount(selectedCount)} checked products, including selections on other pages.`}
+                            {scope === 'filtered' &&
+                                `Every product matching your current collection, category, search and picture filters (${formatCount(filteredCount)}).`}
                         </p>
                     </div>
 
@@ -158,7 +195,13 @@ export function ExportDialog({
                     <Button variant="outline" onClick={() => setOpen(false)}>
                         Cancel
                     </Button>
-                    <Button onClick={submit} disabled={submitting}>
+                    <Button
+                        onClick={submit}
+                        disabled={
+                            submitting ||
+                            (scope === 'selected' && selectedCount === 0)
+                        }
+                    >
                         {submitting ? <Spinner /> : <FileDown />}
                         Prepare file
                     </Button>

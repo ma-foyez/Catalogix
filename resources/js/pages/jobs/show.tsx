@@ -5,6 +5,7 @@ import {
     ArrowLeft,
     Clock,
     Download,
+    Eye,
     ExternalLink,
     ImageOff,
     PackageSearch,
@@ -12,6 +13,7 @@ import {
     Search,
     Trash2,
     Wand2,
+    X,
 } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import ScrapeJobController from '@/actions/App/Http/Controllers/ScrapeJobController';
@@ -20,9 +22,12 @@ import { ExportDialog } from '@/components/export-dialog';
 import { PaginationLinks } from '@/components/pagination-links';
 import { ProductDetails, StockBadge } from '@/components/product-details';
 import { ProductThumb } from '@/components/product-thumb';
+import { ProductImagePreview } from '@/components/product-image-preview';
 import { StatusBadge } from '@/components/status-badge';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Button } from '@/components/ui/button';
+import { Checkbox } from '@/components/ui/checkbox';
+import { Label } from '@/components/ui/label';
 import { Input } from '@/components/ui/input';
 import {
     Select,
@@ -46,7 +51,6 @@ import { useLivePoll } from '@/hooks/use-live-poll';
 import { CollectionControls } from '@/components/collection-controls';
 import { useThrottledReload } from '@/hooks/use-throttled-reload';
 import { formatCount, formatTaka } from '@/lib/format';
-import { cn } from '@/lib/utils';
 import { discover } from '@/routes';
 import { show } from '@/routes/jobs';
 import { edit as recipeEdit } from '@/routes/sites/recipe';
@@ -56,20 +60,17 @@ import type {
     ProductImage,
     ScrapeJob,
     ScrapeTarget,
+    ExportSelection,
+    ProductFilters,
 } from '@/types/catalogix';
 
-type Filters = {
-    route: string | null;
-    category: string | null;
-    search: string;
-    image: string | null;
-};
+type Filters = ProductFilters;
 
 type Props = {
     job: ScrapeJob;
     products: Paginated<Product>;
     filters: Filters;
-    categories: { id: number; name: string; count: number }[];
+    categories: { id: number | null; name: string; count: number }[];
     imageStats: { pending: number; downloaded: number; failed: number };
     isAdmin: boolean;
 };
@@ -96,6 +97,10 @@ export default function JobShow({
     const [rows, setRows] = useState<Product[]>(products.data);
     const [search, setSearch] = useState(filters.search);
     const [selected, setSelected] = useState<Product | null>(null);
+    const [preview, setPreview] = useState<Product | null>(null);
+    const [checked, setChecked] = useState<Set<number>>(new Set());
+    const [allMatching, setAllMatching] = useState(false);
+    const [excluded, setExcluded] = useState<Set<number>>(new Set());
     const reload = useThrottledReload(LIVE_PROPS);
     const excel = useExcelDownload();
 
@@ -150,7 +155,52 @@ export default function JobShow({
         (route) => route.status === 'failed' || route.status === 'blocked',
     );
 
+    const selectedCount = allMatching
+        ? Math.max(0, products.meta.total - excluded.size)
+        : checked.size;
+    const selection: ExportSelection = allMatching
+        ? { filters, excluded_product_ids: [...excluded] }
+        : { product_ids: [...checked] };
+    const isChecked = (id: number) =>
+        allMatching ? !excluded.has(id) : checked.has(id);
+    const pageChecked = rows.filter((product) => isChecked(product.id)).length;
+    const clearSelection = () => {
+        setChecked(new Set());
+        setExcluded(new Set());
+        setAllMatching(false);
+    };
+    const toggleProduct = (id: number, value: boolean) => {
+        if (allMatching) {
+            setExcluded((current) => {
+                const next = new Set(current);
+                if (value) next.delete(id);
+                else next.add(id);
+                return next;
+            });
+        } else {
+            setChecked((current) => {
+                const next = new Set(current);
+                if (value) next.add(id);
+                else next.delete(id);
+                return next;
+            });
+        }
+    };
+    const togglePage = (value: boolean) => {
+        const update = (current: Set<number>) => {
+            const next = new Set(current);
+            for (const product of rows) {
+                if (allMatching ? !value : value) next.add(product.id);
+                else next.delete(product.id);
+            }
+            return next;
+        };
+        if (allMatching) setExcluded(update);
+        else setChecked(update);
+    };
+
     const applyFilters = (changes: Partial<Filters>) => {
+        if (allMatching) clearSelection();
         const next = { ...filters, search, ...changes };
 
         router.get(
@@ -161,7 +211,7 @@ export default function JobShow({
                 ),
             ),
             {
-                only: ['products', 'filters'],
+                only: ['products', 'filters', 'categories'],
                 preserveState: true,
                 preserveScroll: true,
                 replace: true,
@@ -178,7 +228,13 @@ export default function JobShow({
 
         return () => clearTimeout(timer);
         // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [search]);
+    }, [
+        search,
+        filters.search,
+        filters.route,
+        filters.category,
+        filters.image,
+    ]);
 
     return (
         <>
@@ -293,6 +349,10 @@ export default function JobShow({
                                 domain={job.domain}
                                 route={activeRoute}
                                 totalProducts={job.total_products}
+                                selectedCount={selectedCount}
+                                selection={selection}
+                                filters={filters}
+                                filteredCount={products.meta.total}
                             />
                             <Button
                                 onClick={() => excel.download(job.id)}
@@ -308,7 +368,7 @@ export default function JobShow({
                                 )}
                                 {excel.preparing(job.id)
                                     ? 'Preparing…'
-                                    : 'Download Excel'}
+                                    : 'Export all products'}
                             </Button>
                         </div>
                     </div>
@@ -409,97 +469,247 @@ export default function JobShow({
                     </Alert>
                 )}
 
-                {routes.length > 1 && (
-                    <nav
-                        className="-mx-4 flex gap-1 overflow-x-auto border-b px-4 md:-mx-6 md:px-6"
-                        aria-label="Sections"
-                    >
-                        <SectionTab
-                            active={filters.route === null}
-                            onClick={() => applyFilters({ route: null })}
-                            label="All"
-                            count={job.total_products}
-                        />
-                        {routes.map((route) => (
-                            <SectionTab
-                                key={route.id}
-                                active={filters.route === String(route.id)}
-                                onClick={() =>
-                                    applyFilters({ route: String(route.id) })
-                                }
-                                label={
-                                    route.category ??
-                                    new URL(route.url).pathname
-                                }
-                                count={route.products_found}
-                                status={route.status}
-                            />
-                        ))}
-                    </nav>
-                )}
-
-                <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <div className="relative flex-1">
-                        <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-                        <Input
-                            value={search}
-                            onChange={(event) => setSearch(event.target.value)}
-                            placeholder="Search by name, SKU or brand"
-                            className="pl-9"
-                            aria-label="Search products"
-                        />
-                    </div>
-                    {categories.length > 1 && (
-                        <Select
-                            value={filters.category ?? 'all'}
-                            onValueChange={(value) =>
-                                applyFilters({
-                                    category: value === 'all' ? null : value,
-                                })
-                            }
-                        >
-                            <SelectTrigger
-                                className="sm:w-56"
-                                aria-label="Category"
+                <section
+                    className="space-y-4 rounded-xl border bg-card p-4"
+                    aria-label="Product filters"
+                >
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-[minmax(15rem,1.5fr)_1fr_1fr_11rem]">
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="product-search"
+                                className="text-xs text-muted-foreground"
                             >
-                                <SelectValue placeholder="All categories" />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="all">
-                                    All categories
-                                </SelectItem>
-                                {categories.map((category) => (
-                                    <SelectItem
-                                        key={category.id}
-                                        value={String(category.id)}
-                                    >
-                                        {category.name} ({category.count})
+                                Search products
+                            </Label>
+                            <div className="relative">
+                                <Search className="pointer-events-none absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+                                <Input
+                                    id="product-search"
+                                    value={search}
+                                    onChange={(event) =>
+                                        setSearch(event.target.value)
+                                    }
+                                    placeholder="Name, SKU or brand"
+                                    className="pl-9"
+                                />
+                            </div>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="collection-filter"
+                                className="text-xs text-muted-foreground"
+                            >
+                                Website collection
+                            </Label>
+                            <Select
+                                value={filters.route ?? 'all'}
+                                onValueChange={(value) =>
+                                    applyFilters({
+                                        route: value === 'all' ? null : value,
+                                        category: null,
+                                    })
+                                }
+                            >
+                                <SelectTrigger
+                                    id="collection-filter"
+                                    className="w-full"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">
+                                        All collected products (
+                                        {formatCount(job.total_products)})
                                     </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    )}
-                    {(imageStats.failed > 0 || filters.image === 'failed') && (
-                        <Button
-                            variant={
-                                filters.image === 'failed'
-                                    ? 'default'
-                                    : 'outline'
-                            }
-                            onClick={() =>
-                                applyFilters({
-                                    image:
-                                        filters.image === 'failed'
-                                            ? null
-                                            : 'failed',
-                                })
-                            }
-                            aria-pressed={filters.image === 'failed'}
-                        >
-                            <ImageOff /> Missing pictures
-                        </Button>
-                    )}
-                </div>
+                                    {routes.map((route) => (
+                                        <SelectItem
+                                            key={route.id}
+                                            value={String(route.id)}
+                                        >
+                                            {route.category ??
+                                                new URL(route.url)
+                                                    .pathname}{' '}
+                                            ({formatCount(route.products_found)}
+                                            )
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="category-filter"
+                                className="text-xs text-muted-foreground"
+                            >
+                                Product category
+                            </Label>
+                            <Select
+                                value={filters.category ?? 'all'}
+                                onValueChange={(value) =>
+                                    applyFilters({
+                                        category:
+                                            value === 'all' ? null : value,
+                                    })
+                                }
+                            >
+                                <SelectTrigger
+                                    id="category-filter"
+                                    className="w-full"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">
+                                        All categories
+                                    </SelectItem>
+                                    {categories.map((category) => (
+                                        <SelectItem
+                                            key={category.id ?? 'uncategorized'}
+                                            value={
+                                                category.id === null
+                                                    ? 'uncategorized'
+                                                    : String(category.id)
+                                            }
+                                        >
+                                            {category.name} (
+                                            {formatCount(category.count)})
+                                        </SelectItem>
+                                    ))}
+                                </SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-1.5">
+                            <Label
+                                htmlFor="picture-filter"
+                                className="text-xs text-muted-foreground"
+                            >
+                                Picture status
+                            </Label>
+                            <Select
+                                value={filters.image ?? 'all'}
+                                onValueChange={(value) =>
+                                    applyFilters({
+                                        image: value === 'all' ? null : value,
+                                    })
+                                }
+                            >
+                                <SelectTrigger
+                                    id="picture-filter"
+                                    className="w-full"
+                                >
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="all">
+                                        All pictures
+                                    </SelectItem>
+                                    <SelectItem value="downloaded">
+                                        Saved locally
+                                    </SelectItem>
+                                    <SelectItem value="pending">
+                                        Still saving
+                                    </SelectItem>
+                                    <SelectItem value="failed">
+                                        Download failed
+                                    </SelectItem>
+                                    <SelectItem value="none">
+                                        No picture found
+                                    </SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                    <div className="flex flex-wrap items-center justify-between gap-2 border-t pt-3 text-xs text-muted-foreground">
+                        <p>
+                            <span className="font-medium text-foreground">
+                                {formatCount(products.meta.total)} unique
+                                products
+                            </span>{' '}
+                            match. Website collections can overlap; each product
+                            appears once in the list and export.
+                        </p>
+                        {(filters.route ||
+                            filters.category ||
+                            filters.search ||
+                            filters.image) && (
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={() => {
+                                    setSearch('');
+                                    applyFilters({
+                                        route: null,
+                                        category: null,
+                                        search: '',
+                                        image: null,
+                                    });
+                                }}
+                            >
+                                <X /> Clear filters
+                            </Button>
+                        )}
+                    </div>
+                </section>
+
+                {selectedCount > 0 && (
+                    <div
+                        className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-primary/30 bg-primary/5 px-4 py-3"
+                        role="status"
+                    >
+                        <div className="space-y-1 text-sm">
+                            <p className="font-medium">
+                                {formatCount(selectedCount)}{' '}
+                                {allMatching
+                                    ? 'matching products selected'
+                                    : 'products selected'}
+                            </p>
+                            <p className="text-xs text-muted-foreground">
+                                Selections are kept across pages. The top export
+                                button includes every product in this
+                                collection.
+                            </p>
+                            {!allMatching &&
+                                products.meta.total > pageChecked && (
+                                    <button
+                                        type="button"
+                                        className="text-xs font-medium text-primary hover:underline"
+                                        onClick={() => {
+                                            setAllMatching(true);
+                                            setChecked(new Set());
+                                            setExcluded(new Set());
+                                        }}
+                                    >
+                                        Select all{' '}
+                                        {formatCount(products.meta.total)}{' '}
+                                        matching products
+                                    </button>
+                                )}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <Button
+                                size="sm"
+                                variant="ghost"
+                                onClick={clearSelection}
+                            >
+                                Clear selection
+                            </Button>
+                            <Button
+                                size="sm"
+                                disabled={excel.preparing(job.id)}
+                                onClick={() =>
+                                    excel.download(job.id, selection)
+                                }
+                            >
+                                {excel.preparing(job.id) ? (
+                                    <Spinner />
+                                ) : (
+                                    <Download />
+                                )}{' '}
+                                Export selected ({formatCount(selectedCount)})
+                            </Button>
+                        </div>
+                    </div>
+                )}
 
                 {rows.length === 0 && running && <ProductSkeleton />}
 
@@ -524,6 +734,21 @@ export default function JobShow({
                         <Table>
                             <TableHeader>
                                 <TableRow>
+                                    <TableHead className="w-10 pl-4">
+                                        <Checkbox
+                                            aria-label="Select all products on this page"
+                                            checked={
+                                                pageChecked === rows.length
+                                                    ? true
+                                                    : pageChecked > 0
+                                                      ? 'indeterminate'
+                                                      : false
+                                            }
+                                            onCheckedChange={(value) =>
+                                                togglePage(value === true)
+                                            }
+                                        />
+                                    </TableHead>
                                     <TableHead className="w-20">
                                         Picture
                                     </TableHead>
@@ -533,10 +758,8 @@ export default function JobShow({
                                         Price
                                     </TableHead>
                                     <TableHead>Stock</TableHead>
-                                    <TableHead className="w-10">
-                                        <span className="sr-only">
-                                            On website
-                                        </span>
+                                    <TableHead className="w-36 text-right">
+                                        Actions
                                     </TableHead>
                                 </TableRow>
                             </TableHeader>
@@ -544,22 +767,45 @@ export default function JobShow({
                                 {rows.map((product) => (
                                     <TableRow
                                         key={product.id}
+                                        data-state={
+                                            isChecked(product.id)
+                                                ? 'selected'
+                                                : undefined
+                                        }
+                                        aria-selected={isChecked(product.id)}
                                         className="animate-in cursor-pointer duration-150 fade-in"
                                         onClick={(event) => {
                                             if (
                                                 !(
                                                     event.target as HTMLElement
-                                                ).closest('a,button')
+                                                ).closest(
+                                                    'a,button,[role="checkbox"]',
+                                                )
                                             ) {
                                                 setSelected(product);
                                             }
                                         }}
                                     >
+                                        <TableCell className="pl-4">
+                                            <Checkbox
+                                                aria-label={`Select ${product.name}`}
+                                                checked={isChecked(product.id)}
+                                                onCheckedChange={(value) =>
+                                                    toggleProduct(
+                                                        product.id,
+                                                        value === true,
+                                                    )
+                                                }
+                                            />
+                                        </TableCell>
                                         <TableCell>
                                             <ProductThumb
                                                 image={product.image}
                                                 name={product.name}
                                                 className="size-16"
+                                                onPreview={() =>
+                                                    setPreview(product)
+                                                }
                                             />
                                         </TableCell>
                                         <TableCell className="max-w-96 min-w-56">
@@ -590,7 +836,8 @@ export default function JobShow({
                                             )}
                                         </TableCell>
                                         <TableCell className="text-sm">
-                                            {product.category ?? '—'}
+                                            {product.category ??
+                                                'Uncategorized'}
                                             {product.subcategory && (
                                                 <span className="block text-xs text-muted-foreground">
                                                     › {product.subcategory}
@@ -629,7 +876,16 @@ export default function JobShow({
                                                 inStock={product.in_stock}
                                             />
                                         </TableCell>
-                                        <TableCell>
+                                        <TableCell className="text-right">
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={() =>
+                                                    setSelected(product)
+                                                }
+                                            >
+                                                <Eye /> View
+                                            </Button>
                                             {product.product_url && (
                                                 <a
                                                     href={product.product_url}
@@ -677,8 +933,24 @@ export default function JobShow({
             </div>
 
             <ProductDetails
-                product={selected}
+                product={
+                    rows.find((product) => product.id === selected?.id) ??
+                    selected
+                }
                 onOpenChange={(open) => !open && setSelected(null)}
+                onPreview={() =>
+                    setPreview(
+                        rows.find((product) => product.id === selected?.id) ??
+                            selected,
+                    )
+                }
+            />
+            <ProductImagePreview
+                product={
+                    rows.find((product) => product.id === preview?.id) ??
+                    preview
+                }
+                onOpenChange={(open) => !open && setPreview(null)}
             />
         </>
     );
@@ -738,53 +1010,6 @@ function JobActivity({
                 {formatCount(pendingImages)} left
             </span>
         </span>
-    );
-}
-
-function SectionTab({
-    active,
-    onClick,
-    label,
-    count,
-    status,
-}: {
-    active: boolean;
-    onClick: () => void;
-    label: string;
-    count: number;
-    status?: ScrapeTarget['status'];
-}) {
-    const dot = {
-        queued: 'bg-muted-foreground',
-        crawling: 'bg-info animate-pulse',
-        done: 'bg-success',
-        blocked: 'bg-warning',
-        failed: 'bg-destructive',
-    } as const;
-
-    return (
-        <button
-            type="button"
-            onClick={onClick}
-            aria-current={active ? 'page' : undefined}
-            className={cn(
-                '-mb-px flex shrink-0 items-center gap-2 border-b-2 px-3 py-2 text-sm whitespace-nowrap transition-colors focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none',
-                active
-                    ? 'border-primary font-medium text-foreground'
-                    : 'border-transparent text-muted-foreground hover:text-foreground',
-            )}
-        >
-            {status && status !== 'done' && (
-                <span
-                    aria-label={status}
-                    className={cn('size-2 rounded-full', dot[status])}
-                />
-            )}
-            {label}
-            <span className="rounded bg-muted px-1.5 font-mono text-xs tabular-nums">
-                {formatCount(count)}
-            </span>
-        </button>
     );
 }
 

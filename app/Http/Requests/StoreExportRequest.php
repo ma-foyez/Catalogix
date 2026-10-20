@@ -5,6 +5,7 @@ namespace App\Http\Requests;
 use App\Enums\ExportFormat;
 use App\Enums\ExportLayout;
 use App\Enums\ExportScope;
+use App\Http\Requests\Concerns\ValidatesProductSelection;
 use App\Models\ScrapeJob;
 use App\Models\ScrapeTarget;
 use Closure;
@@ -15,12 +16,15 @@ use Illuminate\Validation\Validator;
 
 class StoreExportRequest extends FormRequest
 {
+    use ValidatesProductSelection;
+
     /**
      * @return array<string, ValidationRule|array<mixed>|string>
      */
     public function rules(): array
     {
         return [
+            ...$this->selectionRules(),
             'scope' => ['required', Rule::enum(ExportScope::class)],
             'job_id' => ['nullable', 'required_if:scope,site', 'integer', 'exists:scrape_jobs,id'],
             'route_id' => ['nullable', 'required_if:scope,route', 'integer', 'exists:scrape_targets,id'],
@@ -49,6 +53,11 @@ class StoreExportRequest extends FormRequest
                 if ($this->filled('route_id') && ($target = ScrapeTarget::with('scrapeJob')->find($this->integer('route_id'))) && ! $user?->can('view', $target->scrapeJob)) {
                     $validator->errors()->add('route_id', 'You cannot export this route.');
                 }
+
+                $job = $this->input('scope') === 'route'
+                    ? ScrapeTarget::find($this->integer('route_id'))?->scrapeJob
+                    : ($this->input('scope') === 'site' ? ScrapeJob::find($this->integer('job_id')) : null);
+                $this->validateSelection($validator, $job);
             },
         ];
     }

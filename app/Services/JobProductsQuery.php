@@ -20,7 +20,8 @@ final class JobProductsQuery
         $route = $filters['route'] ?? null;
 
         $query = Product::query()
-            ->with(['category', 'image', 'site'])
+            ->with(['category', 'image', 'site', 'scrapeTargets' => fn ($query) => $query
+                ->where('scrape_job_id', $job->id)->with('discoveredRoute')])
             ->whereHas('scrapeTargets', function (Builder $targets) use ($job, $route): void {
                 $targets->where('scrape_targets.scrape_job_id', $job->id);
 
@@ -29,7 +30,9 @@ final class JobProductsQuery
                 }
             });
 
-        if (! empty($filters['category'])) {
+        if (($filters['category'] ?? null) === 'uncategorized') {
+            $query->whereNull('products.category_id');
+        } elseif (! empty($filters['category'])) {
             $query->where('products.category_id', (int) $filters['category']);
         }
 
@@ -38,8 +41,10 @@ final class JobProductsQuery
             $query->where(fn (Builder $q) => $q->where('products.name', 'like', $term)->orWhere('products.sku', 'like', $term)->orWhere('products.brand', 'like', $term));
         }
 
-        if (($filters['image'] ?? null) === 'failed') {
-            $query->whereHas('image', fn (Builder $images) => $images->where('status', 'failed'));
+        if (in_array($filters['image'] ?? null, ['pending', 'downloaded', 'failed'], true)) {
+            $query->whereHas('image', fn (Builder $images) => $images->where('status', $filters['image']));
+        } elseif (($filters['image'] ?? null) === 'none') {
+            $query->whereDoesntHave('image');
         }
 
         return $query->orderBy('products.category_id')->orderBy('products.id');

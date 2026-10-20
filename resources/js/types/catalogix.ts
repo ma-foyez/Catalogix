@@ -141,6 +141,7 @@ export type ProductImage = {
     id: number;
     status: ImageStatus;
     url: string | null;
+    download_url: string | null;
     thumb_url: string | null;
     source_url: string;
     local_path: string | null;
@@ -161,6 +162,14 @@ export type Product = {
     description: string | null;
     discount_percent: number | null;
     site: string;
+    website_url: string;
+    sources?: {
+        id: number;
+        url: string;
+        category: string | null;
+        source: string | null;
+        strategy: string | null;
+    }[];
     in_stock: boolean | null;
     product_url: string | null;
     sku: string | null;
@@ -175,6 +184,19 @@ export type ExportLayout = 'per_site' | 'single';
 
 export type ExportScope = 'route' | 'site' | 'all';
 
+export type ProductFilters = {
+    route: string | null;
+    category: string | null;
+    search: string;
+    image: string | null;
+};
+
+export type ExportSelection = {
+    product_ids?: number[];
+    excluded_product_ids?: number[];
+    filters?: ProductFilters;
+};
+
 export type ExportFile = {
     id: number;
     scrape_job_id: number | null;
@@ -182,6 +204,8 @@ export type ExportFile = {
         type: ExportScope;
         scrape_job_id?: number;
         scrape_target_id?: number;
+        product_ids?: number[];
+        filters?: ProductFilters;
     };
     format: ExportFormat;
     format_label: string;

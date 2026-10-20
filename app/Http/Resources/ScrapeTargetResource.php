@@ -24,7 +24,7 @@ class ScrapeTargetResource extends JsonResource
             'strategy' => $this->strategy_used?->value,
             'strategy_label' => $this->strategy_used?->label(),
             'pages_crawled' => $this->pages_crawled,
-            'products_found' => $this->products_found,
+            'products_found' => $this->products_count ?? $this->products_found,
             'error' => $this->error,
         ];
     }

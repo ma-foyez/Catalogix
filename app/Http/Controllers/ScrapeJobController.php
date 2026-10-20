@@ -39,7 +39,7 @@ class ScrapeJobController extends Controller
         $filters = $request->only(['route', 'category', 'search', 'image']);
 
         return Inertia::render('jobs/show', [
-            'job' => (new ScrapeJobResource($job->load(['discovery.site', 'targets.discoveredRoute'])))->resolve(),
+            'job' => (new ScrapeJobResource($job->load(['discovery.site', 'targets' => fn ($query) => $query->with('discoveredRoute')->withCount('products')])))->resolve(),
             'products' => ProductResource::collection($products->for($job, $filters)->paginate(50)->withQueryString()),
             'filters' => [
                 'route' => $filters['route'] ?? null,
@@ -47,7 +47,7 @@ class ScrapeJobController extends Controller
                 'search' => $filters['search'] ?? '',
                 'image' => $filters['image'] ?? null,
             ],
-            'categories' => $this->categories($job),
+            'categories' => $this->categories($job, $products, $filters),
             'imageStats' => $job->imageStats(),
             'isAdmin' => (bool) $request->user()->is_admin,
         ]);
@@ -87,21 +87,23 @@ class ScrapeJobController extends Controller
     }
 
     /**
-     * @return list<array{id: int, name: string, count: int}>
+     * @param  array{route?: int|string|null, category?: int|string|null, search?: string|null, image?: string|null}  $filters
+     * @return list<array{id: int|null, name: string, count: int}>
      */
-    private function categories(ScrapeJob $job): array
+    private function categories(ScrapeJob $job, JobProductsQuery $products, array $filters): array
     {
-        return array_values(DB::table('categories')
+        unset($filters['category']);
+        $productIds = $products->for($job, $filters)->reorder()->select('products.id');
+
+        return array_values(DB::table('products')
             ->select('categories.id', 'categories.name')
             ->selectRaw('count(distinct products.id) as product_count')
-            ->join('products', 'products.category_id', '=', 'categories.id')
-            ->join('product_scrape_target', 'product_scrape_target.product_id', '=', 'products.id')
-            ->join('scrape_targets', 'scrape_targets.id', '=', 'product_scrape_target.scrape_target_id')
-            ->where('scrape_targets.scrape_job_id', $job->id)
+            ->leftJoin('categories', 'products.category_id', '=', 'categories.id')
+            ->whereIn('products.id', $productIds)
             ->groupBy('categories.id', 'categories.name')
             ->orderBy('categories.name')
             ->get()
-            ->map(fn (stdClass $row) => ['id' => (int) $row->id, 'name' => (string) $row->name, 'count' => (int) $row->product_count])
+            ->map(fn (stdClass $row) => ['id' => $row->id !== null ? (int) $row->id : null, 'name' => $row->name ?? 'Uncategorized', 'count' => (int) $row->product_count])
             ->all());
     }
 }

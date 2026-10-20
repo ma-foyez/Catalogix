@@ -38,12 +38,12 @@ final class ImagesZipBuilder
 
             $entry = $product->site->domain.'/'.($product->category?->slug ?: 'uncategorized').'/'.basename($image->local_path);
 
-            if (isset($added[$entry])) {
+            if (isset($added[$image->local_path])) {
                 continue;
             }
 
             $zip->addFile($disk->path($image->local_path), $entry);
-            $added[$entry] = true;
+            $added[$image->local_path] = true;
         }
 
         if ($added === []) {

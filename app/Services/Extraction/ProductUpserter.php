@@ -9,7 +9,6 @@ use App\Models\ProductImage;
 use App\Models\ScrapeJob;
 use App\Models\ScrapeTarget;
 use App\Models\Site;
-use App\Services\Crawling\UrlTools;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -78,8 +77,8 @@ final class ProductUpserter
             ->pluck('products.hash')
             ->flip();
 
-        // The home page lists products from everywhere: it never names their category.
-        $isHome = UrlTools::isHomePage($target->url);
+        // Home and all-products listings can contain every category; they only fill missing labels.
+        $isHome = GeneralProductListing::matches($target->url, $target->categoryName());
         [$routeCategory, $routeSubcategory] = $isHome ? [null, null] : $this->routeCategories($target);
         $now = now();
         $productIds = [];
@@ -138,7 +137,7 @@ final class ProductUpserter
                 // Earlier versions labelled home-page products "Home"; that is not a category.
                 Product::query()
                     ->whereIn('id', $ids->values())
-                    ->whereIn('category_id', Category::query()->where('site_id', $site->id)->where('slug', 'home')->select('id'))
+                    ->whereIn('category_id', Category::query()->where('site_id', $site->id)->whereIn('slug', ['home', 'all-products', 'products', 'shop', 'all'])->select('id'))
                     ->update(['category_id' => null]);
             }
 

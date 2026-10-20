@@ -97,6 +97,12 @@ For automatic startup after reboot, install the production service once. See [Ba
 
 ## Configuration
 
+On the products page, **View** opens product details with category, brand, website, product link and collection sources. Clicking a picture opens an in-page preview; **Download image** saves the local picture as an attachment. Source pictures can be previewed while their local copies are being saved.
+
+Check individual products or the page checkbox to select rows across pages. **Export selected** prepares Excel with pictures for those products. **Select all matching products** includes matches on other pages, with the option to uncheck exceptions. **Export options** also supports filtered products, the whole collection, a website section, or all websites in Excel, CSV or an image ZIP. **Export all products** always exports the entire collection.
+
+Website collections can overlap; their counts are not additive. Product lists and exports contain unique products. Product category counts reflect the current collection/search/picture filters and include **Uncategorized** when necessary. Broad listings such as "All Products" no longer overwrite specific categories. Existing broad labels can be repaired from saved source data using `php artisan catalogix:repair-categories --site=example.com` (preview with `--dry-run`).
+
 `.env` keys added by Catalogix (defaults in [config/catalogix.php](config/catalogix.php)):
 
 | Key | Default | Meaning |
