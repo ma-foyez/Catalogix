@@ -15,7 +15,7 @@ final class QueueHealth
     public const array QUEUES = ['discovery', 'pages', 'images', 'exports'];
 
     /** Command shown to the user when nothing is listening. */
-    public const string WORKER_COMMAND = 'php artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960';
+    public const string WORKER_COMMAND = 'php artisan catalogix:work';
 
     private const string SEEN_KEY = 'catalogix:queue-seen:';
 
@@ -56,10 +56,10 @@ final class QueueHealth
 
         $table = (string) config('queue.connections.database.table', 'jobs');
 
-        // A worker busy with a long job (a discovery can take minutes) stops polling; that is not a stall.
-        if (DB::table($table)->whereIn('queue', self::QUEUES)->whereNotNull('reserved_at')->exists()) {
-            return null;
-        }
+        // A busy discovery worker must not hide a missing image or export worker.
+        $busy = DB::table($table)->whereIn('queue', self::QUEUES)
+            ->where('reserved_at', '>', now()->subSeconds((int) config('queue.connections.database.retry_after', 1020))->getTimestamp())
+            ->distinct()->pluck('queue')->all();
 
         /** @var array<string, int> $waiting */
         $waiting = DB::table($table)
@@ -74,7 +74,7 @@ final class QueueHealth
 
         $stalled = array_values(array_filter(
             array_keys($waiting),
-            fn (string $queue) => ! Cache::has(self::SEEN_KEY.$queue),
+            fn (string $queue) => ! in_array($queue, $busy, true) && ! Cache::has(self::SEEN_KEY.$queue),
         ));
 
         if ($stalled === []) {

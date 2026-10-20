@@ -43,10 +43,17 @@ it('stays quiet once a worker polls the queue', function () {
 });
 
 it('does not flag a worker busy with a long job', function () {
-    waitingJob('pages');
+    waitingJob('discovery');
     waitingJob('discovery', reservedAt: now()->getTimestamp());
 
     expect(app(QueueHealth::class)->stalled())->toBeNull();
+});
+
+it('reports a missing page worker even while discovery is busy', function () {
+    waitingJob('pages');
+    waitingJob('discovery', reservedAt: now()->getTimestamp());
+
+    expect(app(QueueHealth::class)->stalled()['queues'])->toBe(['pages']);
 });
 
 it('gives a freshly queued job a moment before calling it stalled', function () {

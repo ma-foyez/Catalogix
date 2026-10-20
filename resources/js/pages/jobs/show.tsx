@@ -43,6 +43,7 @@ import {
 } from '@/components/ui/table';
 import { useExcelDownload } from '@/hooks/use-excel-download';
 import { useLivePoll } from '@/hooks/use-live-poll';
+import { CollectionControls } from '@/components/collection-controls';
 import { useThrottledReload } from '@/hooks/use-throttled-reload';
 import { formatCount, formatTaka } from '@/lib/format';
 import { cn } from '@/lib/utils';
@@ -129,7 +130,7 @@ export default function JobShow({
         job.status === 'queued' &&
         (queueStalled?.queues.includes('pages') ?? false);
     const crawling = routes.find((route) => route.status === 'crawling');
-    const working = running || imageStats.pending > 0;
+    const working = !job.paused && (running || imageStats.pending > 0);
     const imageTotal =
         imageStats.pending + imageStats.downloaded + imageStats.failed;
     const progress = running
@@ -198,7 +199,9 @@ export default function JobShow({
                                 <h1 className="font-mono text-xl font-semibold">
                                     {job.domain ?? `Website #${job.id}`}
                                 </h1>
-                                {working ? (
+                                {job.paused ? (
+                                    <StatusBadge status="paused" />
+                                ) : working ? (
                                     <StatusBadge
                                         status="running"
                                         label={
@@ -227,6 +230,13 @@ export default function JobShow({
                                     {formatCount(imageStats.downloaded)}
                                 </span>{' '}
                                 pictures saved
+                                {job.max_products !== null && (
+                                    <>
+                                        {' '}
+                                        · Limit: {formatCount(job.max_products)}
+                                        {job.limit_reached ? ' (reached)' : ''}
+                                    </>
+                                )}
                                 {imageStats.failed > 0 && (
                                     <>
                                         {' '}
@@ -241,6 +251,13 @@ export default function JobShow({
                         </div>
 
                         <div className="flex flex-wrap gap-2">
+                            {(working || job.paused) && (
+                                <CollectionControls
+                                    kind="jobs"
+                                    id={job.id}
+                                    paused={job.paused}
+                                />
+                            )}
                             {imageStats.failed > 0 && !working && (
                                 <Button
                                     variant="ghost"
@@ -257,7 +274,7 @@ export default function JobShow({
                                     <ImageOff /> Retry missing pictures
                                 </Button>
                             )}
-                            {!running && (
+                            {!running && !job.paused && (
                                 <Button
                                     variant="ghost"
                                     onClick={() =>
@@ -327,6 +344,17 @@ export default function JobShow({
                         </div>
                     )}
                 </header>
+
+                {job.paused && (
+                    <p
+                        role="status"
+                        className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+                    >
+                        Collection is paused. A page or picture already being
+                        processed may finish. Your products are saved; resume to
+                        continue within 30 seconds.
+                    </p>
+                )}
 
                 {problemRoutes.length > 0 && (
                     <Alert>

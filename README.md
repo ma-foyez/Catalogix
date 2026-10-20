@@ -74,7 +74,7 @@ Set `PYTHON_BIN` in `.env` (`python` on Windows, `python3` on Linux). Laravel ca
 
 ## Run locally
 
-One command starts everything — the server, Vite, Reverb and two queue workers (one for discovery and pages, one for images and exports):
+One command starts the server, Vite, Reverb, and eight independent workers for discovery, product pages, images, exports, and default tasks:
 
 ```bash
 composer dev
@@ -86,12 +86,14 @@ Or run the pieces yourself:
 php artisan serve                     # http://localhost:8000
 npm run dev                           # Vite (or rely on npm run build)
 php artisan reverb:start              # live updates on :8080 (optional: pages poll without it)
-php artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960
+php artisan catalogix:work
 ```
 
-Without a queue worker nothing runs: discoveries stay at "Waiting for a worker" and the app shows a banner with the command to start one. A plain `queue:work` or `queue:listen` only listens on the `default` queue, where Catalogix sends nothing — always pass `--queue=…`. Restart workers after changing PHP code (`php artisan queue:restart`); they keep the old code in memory.
+`composer dev` starts and monitors all workers automatically. Restart workers after PHP changes with `php artisan queue:restart`; the manager replaces them when active work finishes. A plain `queue:work` only listens to the default queue, so use the manager for Catalogix.
 
-Run 2–4 workers to extract several domains in parallel; jobs for the same domain still go one at a time.
+The Websites form supports an optional **Maximum products per website**. Collection stops at that many unique products, then finishes pending pictures. **Pause** and **Resume** hold or continue a website or job; an in-flight request can finish. Products remain available while paused. Resume takes up to 30 seconds.
+
+For automatic startup after reboot, install the production service once. See [Background processing](docs/Background%20processing.md) for Linux Supervisor and the Windows NSSM installer.
 
 ## Configuration
 
@@ -102,12 +104,15 @@ Run 2–4 workers to extract several domains in parallel; jobs for the same doma
 | `CATALOGIX_USER_AGENT` | `CatalogixBot/1.0 (...)` | Sent with every request; robots.txt rules for `CatalogixBot` apply |
 | `CATALOGIX_MAX_PAGES` | 30 | Page limit per route |
 | `CATALOGIX_PAGE_DELAY_MIN` / `_MAX` | 1 / 3 | Seconds between pages of one domain |
-| `CATALOGIX_MAX_PROBES` | 40 | Candidate routes fetched and scored per discovery |
+| `CATALOGIX_MAX_PROBES` | 40 | Candidate routes fetched and scored during manual discovery |
+| `CATALOGIX_AUTO_MAX_PROBES` | 12 | Candidate routes checked during automatic collection |
+| `CATALOGIX_AUTO_MENU_PAGES` | 3 | Second-level menu pages checked during automatic discovery |
+| `CATALOGIX_MAX_SITEMAP_REQUESTS` | 12 | Total sitemap requests per discovery |
 | `CATALOGIX_IMAGE_CONCURRENCY` | 4 | Parallel image downloads per site |
 | `CATALOGIX_EXPORT_IMAGE_ROW_LIMIT` | 3000 | Rows per Excel file with pictures before splitting |
 | `PYTHON_BIN` | `python` | Python executable for the helper |
 | `CATALOGIX_RENDER_TIMEOUT` | 45 | Seconds the helper waits for a page |
-| `DB_QUEUE_RETRY_AFTER` | 1000 | Must stay above the longest job (discovery, 900 s) |
+| `DB_QUEUE_RETRY_AFTER` / `REDIS_QUEUE_RETRY_AFTER` | 1020 | Must exceed the longest worker timeout (960 s) |
 
 Also required: `QUEUE_CONNECTION=database`, `BROADCAST_CONNECTION=reverb` and the `REVERB_*` / `VITE_REVERB_*` keys.
 
@@ -118,9 +123,11 @@ Sanctum tokens, same features as the web app. All routes except `POST /api/token
 | Method | Endpoint | Does |
 | --- | --- | --- |
 | POST | `/api/tokens` `{email, password, device_name}` | Issues a token |
-| POST | `/api/discoveries` `{domain}` or `{domains: [...]}`, optional `auto_extract` | Starts discovery → `202` with the discovery (or a list). With `auto_extract: true` the recommended routes are extracted automatically, as in the web app |
+| POST | `/api/discoveries` `{domain}` or `{domains: [...]}`, optional `auto_extract`, `max_products` | Starts discovery → `202` with the discovery (or a list). With `auto_extract: true` the recommended routes are extracted automatically, as in the web app |
 | GET | `/api/discoveries/{id}` | Status + routes (score, est. products, sample images) |
 | POST | `/api/discoveries/{id}/extract` `{route_ids[]}` | Starts extraction → `202` with the job |
+| POST | `/api/discoveries/{id}/pause` or `/resume` | Pause or resume the website collection |
+| POST | `/api/jobs/{id}/pause` or `/resume` | Pause or resume a job and its pending images |
 | GET | `/api/jobs/{id}` | Status, per-route progress, product counts, image counts |
 | GET | `/api/jobs/{id}/products?route=&category=&search=&page=&per_page=` | Products with local image and thumbnail URLs |
 | POST | `/api/jobs/{id}/images/retry` | Requeues failed image downloads |
@@ -151,25 +158,13 @@ No test touches a real site or the Python helper: HTTP is faked with saved HTML/
 
 ## Deployment
 
-- `php artisan config:cache route:cache view:cache` and `npm run build`.
-- Keep workers and Reverb alive with **Supervisor** (Linux) or **NSSM** (Windows):
+Follow [Background processing](docs/Background%20processing.md). Production workers must be installed as server services once, then the system starts and restarts them automatically; website visitors never run commands.
 
-  ```ini
-  [program:catalogix-worker]
-  command=php /var/www/catalogix/artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960 --sleep=1
-  numprocs=3
-  process_name=%(program_name)s_%(process_num)02d
-  autorestart=true
-  stopwaitsecs=1000
-
-  [program:catalogix-reverb]
-  command=php /var/www/catalogix/artisan reverb:start
-  autorestart=true
-  ```
-
-  On Windows: `nssm install CatalogixWorker C:\laragon\bin\php\php-8.4.24\php.exe "artisan queue:work --queue=exports,pages,discovery,images,default --timeout=960"` with the app folder as the startup directory; repeat for `reverb:start`.
-- Schedule `php artisan schedule:run` every minute (cron or Windows Task Scheduler): it removes expired export files hourly and prunes week-old failed jobs.
-- Product images belong to the source sites: fine for internal research or with the supplier's agreement, not for commercial republishing without permission.
+- Linux: use [deploy/supervisor/catalogix.conf](deploy/supervisor/catalogix.conf), with dedicated capacity for each queue, automatic boot startup, restart, graceful shutdown, and rotated logs.
+- Windows: run [deploy/windows/install-workers.ps1](deploy/windows/install-workers.ps1) once in Administrator PowerShell with NSSM installed.
+- Run migrations, build assets, link storage, and cache configuration during deployment. Set queue retry/visibility timeouts above 960 seconds.
+- Schedule `php artisan schedule:run` every minute for export/failure cleanup. Restart workers after deployments with `php artisan queue:restart`.
+- Reverb is optional; collection progress also uses polling.
 
 ## Decisions beyond the spec
 

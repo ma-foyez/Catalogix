@@ -36,6 +36,9 @@ class SiteRunResource extends JsonResource
             'id' => $this->id,
             'domain' => $this->site->domain,
             'phase' => $phase,
+            'paused' => $this->paused_at !== null || ($job?->paused_at !== null),
+            'max_products' => $job->max_products ?? $this->max_products,
+            'limit_reached' => $job?->limitReached() ?? false,
             'detail' => $detail,
             'progress' => $progress,
             'stage' => $this->stage->value,
@@ -62,6 +65,9 @@ class SiteRunResource extends JsonResource
      */
     private function phase(?ScrapeJob $job, array $images): array
     {
+        if ($this->paused_at !== null || $job?->paused_at !== null) {
+            return ['paused', 'Paused. Collected products are saved. Resume when you are ready; work continues within 30 seconds.', 0];
+        }
         if ($this->status === JobStatus::Failed) {
             return $this->site->is_blocked
                 ? ['blocked', 'This website blocks automatic visitors (a login, CAPTCHA or bot check), so it can\'t be read.', 100]
@@ -117,6 +123,6 @@ class SiteRunResource extends JsonResource
             return ['images', "Saving pictures · {$saved} of {$total}", 80 + (int) round(20 * ($total > 0 ? $saved / $total : 0))];
         }
 
-        return ['ready', 'All done — view the products or download the Excel file.', 100];
+        return ['ready', $job->limitReached() ? "Product limit reached ({$job->max_products}). Your products are ready." : 'All done — view the products or download the Excel file.', 100];
     }
 }

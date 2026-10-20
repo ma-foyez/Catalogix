@@ -41,6 +41,9 @@ return [
     ],
 
     'discovery' => [
+        'auto_max_probes' => (int) env('CATALOGIX_AUTO_MAX_PROBES', 12),
+        'auto_menu_pages' => (int) env('CATALOGIX_AUTO_MENU_PAGES', 3),
+        'max_sitemap_requests' => (int) env('CATALOGIX_MAX_SITEMAP_REQUESTS', 12),
         'menu_depth' => 2,
         'max_sitemap_urls' => 5000,
         'max_menu_pages' => 15,

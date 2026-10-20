@@ -24,6 +24,7 @@ class StoreDiscoveryRequest extends FormRequest
             'domains.*' => ['string', 'max:2000'],
             'domain' => ['required_without:domains', 'nullable', 'string', 'max:2000'],
             'auto_extract' => ['nullable', 'boolean'],
+            'max_products' => ['nullable', 'integer', 'min:1', 'max:100000'],
         ];
     }
 

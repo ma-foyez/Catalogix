@@ -36,6 +36,7 @@ const dotVariants = cva('size-1.5 rounded-full', {
 type Tone = NonNullable<VariantProps<typeof statusBadgeVariants>['tone']>;
 
 const STATUS: Record<string, { tone: Tone; label: string; live?: boolean }> = {
+    paused: { tone: 'warning', label: 'Paused' },
     queued: { tone: 'neutral', label: 'Queued' },
     running: { tone: 'info', label: 'Running', live: true },
     crawling: { tone: 'info', label: 'Crawling', live: true },

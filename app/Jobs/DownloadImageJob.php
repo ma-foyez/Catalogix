@@ -8,10 +8,10 @@ use App\Exceptions\ImageDownloadException;
 use App\Http\Resources\ProductImageResource;
 use App\Jobs\Middleware\ConcurrencySlots;
 use App\Models\ProductImage;
+use App\Models\ScrapeJob;
 use App\Models\ScrapeTarget;
 use App\Services\Images\ImageDownloader;
 use App\Support\Live;
-use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
@@ -28,6 +28,8 @@ class DownloadImageJob implements ShouldBeUnique, ShouldQueue
 
     public int $maxExceptions = 3;
 
+    public int $tries = 0;
+
     /** @var list<int> */
     public array $backoff = [30, 120, 300];
 
@@ -41,11 +43,6 @@ class DownloadImageJob implements ShouldBeUnique, ShouldQueue
     public function uniqueId(): string
     {
         return (string) $this->imageId;
-    }
-
-    public function retryUntil(): DateTimeInterface
-    {
-        return now()->addMinutes(45);
     }
 
     /**
@@ -64,10 +61,20 @@ class DownloadImageJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $jobs = ScrapeJob::query()
+            ->whereHas('targets.products', fn ($query) => $query->where('products.id', $image->product_id))
+            ->with('discovery')->get();
+
+        if ($jobs->isNotEmpty() && $jobs->every(fn ($job) => $job->isPaused())) {
+            $this->release(30);
+
+            return;
+        }
+
         try {
             $downloader->download($image);
         } catch (ImageDownloadException $e) {
-            if ($e->retryable && $this->attempts() < (int) config('catalogix.images.max_attempts', 3)) {
+            if ($e->retryable && $image->attempts < (int) config('catalogix.images.max_attempts', 3)) {
                 throw $e;
             }
 

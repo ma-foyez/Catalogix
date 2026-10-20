@@ -23,12 +23,13 @@ class DiscoveryController extends Controller
     {
         $domains = $request->domains();
         $auto = $request->boolean('auto_extract');
+        $maxProducts = $request->filled('max_products') ? $request->integer('max_products') : null;
 
         if (count($domains) === 1) {
-            return (new DiscoveryResource($discoveries->start($request->user(), $domains[0], $auto)))->response()->setStatusCode(202);
+            return (new DiscoveryResource($discoveries->start($request->user(), $domains[0], $auto, $maxProducts)))->response()->setStatusCode(202);
         }
 
-        $started = $discoveries->startMany($request->user(), $domains, $auto)['started'];
+        $started = $discoveries->startMany($request->user(), $domains, $auto, $maxProducts)['started'];
 
         return DiscoveryResource::collection($started)->response()->setStatusCode(202);
     }
@@ -48,7 +49,7 @@ class DiscoveryController extends Controller
      */
     public function extract(ExtractRoutesRequest $request, Discovery $discovery, ExtractionService $extraction): JsonResponse
     {
-        $job = $extraction->start($request->user(), $discovery, $request->routeIds());
+        $job = $extraction->start($request->user(), $discovery, $request->routeIds(), $request->filled('max_products') ? $request->integer('max_products') : null);
 
         return (new ScrapeJobResource($job->load(['discovery.site', 'targets.discoveredRoute'])))->response()->setStatusCode(202);
     }

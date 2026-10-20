@@ -16,7 +16,7 @@ final class DiscoveryService
     /**
      * Start route discovery for whatever the user typed: "chaldal.com", "www.chaldal.com" or a full URL.
      */
-    public function start(User $user, string $input, bool $autoExtract = false): Discovery
+    public function start(User $user, string $input, bool $autoExtract = false, ?int $maxProducts = null): Discovery
     {
         $domain = UrlTools::domainFromInput($input) ?? throw new InvalidArgumentException('Enter a domain such as chaldal.com.');
 
@@ -24,6 +24,7 @@ final class DiscoveryService
             'user_id' => $user->id,
             'site_id' => Site::forHost($domain)->id,
             'auto_extract' => $autoExtract,
+            'max_products' => $maxProducts,
             'status' => JobStatus::Queued,
         ]);
 
@@ -39,7 +40,7 @@ final class DiscoveryService
      * @param  list<string>  $domains
      * @return array{started: list<Discovery>, skipped: list<string>}
      */
-    public function startMany(User $user, array $domains, bool $autoExtract = true): array
+    public function startMany(User $user, array $domains, bool $autoExtract = true, ?int $maxProducts = null): array
     {
         $started = [];
         $skipped = [];
@@ -57,7 +58,7 @@ final class DiscoveryService
                 continue;
             }
 
-            $started[] = $this->start($user, $domain, $autoExtract);
+            $started[] = $this->start($user, $domain, $autoExtract, $maxProducts);
         }
 
         return ['started' => $started, 'skipped' => $skipped];
@@ -68,6 +69,7 @@ final class DiscoveryService
         $discovery->forceFill([
             'status' => JobStatus::Queued,
             'stage' => DiscoveryStage::Waiting,
+            'paused_at' => null,
             'candidates' => 0,
             'probed' => 0,
             'to_probe' => 0,

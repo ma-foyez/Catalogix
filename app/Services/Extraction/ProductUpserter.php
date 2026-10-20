@@ -6,6 +6,7 @@ use App\Enums\ImageStatus;
 use App\Models\Category;
 use App\Models\Product;
 use App\Models\ProductImage;
+use App\Models\ScrapeJob;
 use App\Models\ScrapeTarget;
 use App\Models\Site;
 use App\Services\Crawling\UrlTools;
@@ -27,6 +28,45 @@ final class ProductUpserter
      * @param  list<array<string, mixed>>  $products
      */
     public function save(ScrapeTarget $target, Site $site, array $products): UpsertResult
+    {
+        // Serialize the budget check and product links, including workers on different routes.
+        return DB::transaction(function () use ($target, $site, $products): UpsertResult {
+            $job = ScrapeJob::query()->lockForUpdate()->findOrFail($target->scrape_job_id);
+
+            if ($job->max_products !== null) {
+                $known = Product::query()
+                    ->whereHas('scrapeTargets', fn ($query) => $query->where('scrape_job_id', $job->id))
+                    ->pluck('hash')->flip();
+                $remaining = max(0, $job->max_products - $known->count());
+                $accepted = [];
+
+                foreach ($products as $product) {
+                    $hash = $product['hash'];
+
+                    if (isset($accepted[$hash])) {
+                        continue;
+                    }
+
+                    if (! $known->has($hash)) {
+                        if ($remaining === 0) {
+                            continue;
+                        }
+
+                        $remaining--;
+                    }
+
+                    $accepted[$hash] = $product;
+                }
+
+                $products = array_values($accepted);
+            }
+
+            return $this->persist($target, $site, $products);
+        });
+    }
+
+    /** @param list<array<string, mixed>> $products */
+    private function persist(ScrapeTarget $target, Site $site, array $products): UpsertResult
     {
         if ($products === []) {
             return new UpsertResult([], 0, []);

@@ -23,7 +23,7 @@ final class ExtractionService
      *
      * @param  list<int>  $routeIds
      */
-    public function start(User $user, Discovery $discovery, array $routeIds): ScrapeJob
+    public function start(User $user, Discovery $discovery, array $routeIds, ?int $maxProducts = null): ScrapeJob
     {
         $routes = $discovery->routes()->whereIn('id', $routeIds)->get();
 
@@ -31,7 +31,7 @@ final class ExtractionService
             throw new InvalidArgumentException('Tick at least one route to extract.');
         }
 
-        $job = DB::transaction(function () use ($user, $discovery, $routes): ScrapeJob {
+        $job = DB::transaction(function () use ($user, $discovery, $routes, $maxProducts): ScrapeJob {
             $discovery->routes()->update(['is_selected' => false]);
             DiscoveredRoute::whereIn('id', $routes->pluck('id'))->update(['is_selected' => true]);
 
@@ -39,6 +39,7 @@ final class ExtractionService
                 'user_id' => $user->id,
                 'discovery_id' => $discovery->id,
                 'status' => JobStatus::Queued,
+                'max_products' => $maxProducts ?? $discovery->max_products,
                 'total_routes' => $routes->count(),
             ]);
 
@@ -102,7 +103,7 @@ final class ExtractionService
             ->map(fn ($id) => (int) $id)
             ->all());
 
-        return $this->start($job->user, $discovery, $routeIds);
+        return $this->start($job->user, $discovery, $routeIds, $job->max_products);
     }
 
     /**

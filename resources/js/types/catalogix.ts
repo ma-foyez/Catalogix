@@ -28,6 +28,7 @@ export type QueueStall = {
 export type ScoreLabel = 'high' | 'medium' | 'low' | 'none';
 
 export type RunPhase =
+    | 'paused'
     | 'waiting'
     | 'finding'
     | 'collecting'
@@ -40,6 +41,9 @@ export type RunPhase =
 
 /** One website as the Websites page shows it, from "waiting" to "ready". */
 export type SiteRun = {
+    paused: boolean;
+    max_products: number | null;
+    limit_reached: boolean;
     id: number;
     domain: string;
     phase: RunPhase;
@@ -76,6 +80,8 @@ export type DiscoveredRoute = {
 };
 
 export type Discovery = {
+    paused: boolean;
+    max_products: number | null;
     id: number;
     domain: string;
     site?: {
@@ -114,6 +120,9 @@ export type ScrapeTarget = {
 };
 
 export type ScrapeJob = {
+    paused: boolean;
+    max_products: number | null;
+    limit_reached: boolean;
     id: number;
     discovery_id: number | null;
     domain: string | null;

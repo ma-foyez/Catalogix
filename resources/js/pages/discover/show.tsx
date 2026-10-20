@@ -11,6 +11,7 @@ import {
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import DiscoveryController from '@/actions/App/Http/Controllers/DiscoveryController';
 import { DiscoveryProgress } from '@/components/discovery-progress';
+import { CollectionControls } from '@/components/collection-controls';
 import { EmptyState } from '@/components/empty-state';
 import { ScoreBadge } from '@/components/score-badge';
 import { StatusBadge, ToneBadge } from '@/components/status-badge';
@@ -104,7 +105,8 @@ export default function DiscoverShow({
     );
 
     const running =
-        discovery.status === 'queued' || discovery.status === 'running';
+        !discovery.paused &&
+        (discovery.status === 'queued' || discovery.status === 'running');
     const stalled =
         discovery.status === 'queued' &&
         (queueStalled?.queues.includes('discovery') ?? false);
@@ -163,8 +165,13 @@ export default function DiscoverShow({
                                     {discovery.domain}
                                 </h1>
                                 <StatusBadge
-                                    status={discovery.status}
+                                    status={
+                                        discovery.paused
+                                            ? 'paused'
+                                            : discovery.status
+                                    }
                                     label={
+                                        !discovery.paused &&
                                         discovery.status === 'running'
                                             ? 'Discovering'
                                             : undefined
@@ -188,16 +195,24 @@ export default function DiscoverShow({
                                 suppressHydrationWarning
                                 className="text-sm text-muted-foreground"
                             >
-                                {running
-                                    ? `Started ${timeAgo(discovery.started_at ?? discovery.created_at)}. Routes appear below as each page is checked.`
-                                    : discovery.status === 'done'
-                                      ? `${formatCount(productRoutes.length)} of ${formatCount(routes.length)} checked ${routes.length === 1 ? 'route lists' : 'routes list'} products. High-score routes are ticked.`
-                                      : `Finished ${timeAgo(discovery.finished_at)}.`}
+                                {discovery.paused
+                                    ? 'Paused. Resume to continue discovery.'
+                                    : running
+                                      ? `Started ${timeAgo(discovery.started_at ?? discovery.created_at)}. Routes appear below as each page is checked.`
+                                      : discovery.status === 'done'
+                                        ? `${formatCount(productRoutes.length)} of ${formatCount(routes.length)} checked ${routes.length === 1 ? 'route lists' : 'routes list'} products. High-score routes are ticked.`
+                                        : `Finished ${timeAgo(discovery.finished_at)}.`}
                             </p>
                         </div>
                     </div>
 
-                    {!running && (
+                    {(running || discovery.paused) && (
+                        <CollectionControls
+                            id={discovery.id}
+                            paused={discovery.paused}
+                        />
+                    )}
+                    {!running && !discovery.paused && (
                         <Button
                             variant="outline"
                             onClick={() =>
@@ -212,6 +227,17 @@ export default function DiscoverShow({
                         </Button>
                     )}
                 </header>
+
+                {discovery.paused && (
+                    <p
+                        role="status"
+                        className="rounded-xl border border-warning/30 bg-warning/10 px-4 py-3 text-sm"
+                    >
+                        Discovery is paused. Resume to continue within 30
+                        seconds. Discovery checks restart; collected products
+                        remain saved.
+                    </p>
+                )}
 
                 {running && (
                     <DiscoveryProgress

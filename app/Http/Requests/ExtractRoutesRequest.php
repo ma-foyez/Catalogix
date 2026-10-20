@@ -25,6 +25,7 @@ class ExtractRoutesRequest extends FormRequest
         $discovery = $this->route('discovery');
 
         return [
+            'max_products' => ['nullable', 'integer', 'min:1', 'max:100000'],
             'route_ids' => ['required', 'array', 'min:1', 'max:500'],
             'route_ids.*' => ['integer', Rule::exists('discovered_routes', 'id')->where('discovery_id', $discovery->id)],
         ];

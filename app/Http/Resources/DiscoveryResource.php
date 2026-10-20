@@ -28,6 +28,8 @@ class DiscoveryResource extends JsonResource
                 'blocked_reason' => $this->site->blocked_reason,
             ]),
             'auto_extract' => $this->auto_extract,
+            'max_products' => $this->max_products,
+            'paused' => $this->paused_at !== null,
             'status' => $this->status->value,
             'stage' => $this->stage->value,
             'stage_label' => $this->stage->label(),

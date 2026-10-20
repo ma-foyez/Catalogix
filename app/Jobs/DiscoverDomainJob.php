@@ -5,12 +5,12 @@ namespace App\Jobs;
 use App\Enums\DiscoveryStage;
 use App\Enums\JobStatus;
 use App\Events\RoutesDiscovered;
+use App\Exceptions\CollectionPaused;
 use App\Http\Resources\DiscoveryResource;
 use App\Models\Discovery;
 use App\Services\Discovery\DomainDiscoverer;
 use App\Services\ExtractionService;
 use App\Support\Live;
-use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -24,14 +24,11 @@ class DiscoverDomainJob implements ShouldQueue
 
     public int $maxExceptions = 1;
 
+    public int $tries = 0;
+
     public function __construct(public int $discoveryId, public string $domain)
     {
         $this->onQueue('discovery');
-    }
-
-    public function retryUntil(): DateTimeInterface
-    {
-        return now()->addHours(2);
     }
 
     /**
@@ -39,7 +36,7 @@ class DiscoverDomainJob implements ShouldQueue
      */
     public function middleware(): array
     {
-        return [(new WithoutOverlapping('domain:'.$this->domain))->releaseAfter(10)->expireAfter(960)];
+        return [(new WithoutOverlapping('domain:'.$this->domain))->shared()->releaseAfter(10)->expireAfter(960)];
     }
 
     public function handle(DomainDiscoverer $discoverer, ExtractionService $extraction): void
@@ -50,7 +47,19 @@ class DiscoverDomainJob implements ShouldQueue
             return;
         }
 
-        $discoverer->run($discovery);
+        if ($discovery->paused_at !== null) {
+            $this->release(30);
+
+            return;
+        }
+
+        try {
+            $discoverer->run($discovery);
+        } catch (CollectionPaused) {
+            $this->release(30);
+
+            return;
+        }
 
         // Sites added from the web app go straight on to extracting the recommended pages.
         if ($discovery->auto_extract && $discovery->refresh()->status === JobStatus::Done && ! $discovery->scrapeJobs()->where('created_at', '>=', $discovery->started_at)->exists()) {

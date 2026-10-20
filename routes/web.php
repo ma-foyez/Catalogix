@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\CollectionControlController;
 use App\Http\Controllers\DiscoveryController;
 use App\Http\Controllers\ExportController;
 use App\Http\Controllers\RecipeController;
@@ -17,6 +18,10 @@ Route::middleware(['auth', 'verified'])->group(function () {
     Route::redirect('dashboard', '/discover')->name('dashboard');
 
     Route::get('discover', [DiscoveryController::class, 'index'])->name('discover');
+    Route::post('discoveries/{discovery}/pause', [CollectionControlController::class, 'pauseDiscovery'])->name('discoveries.pause');
+    Route::post('discoveries/{discovery}/resume', [CollectionControlController::class, 'resumeDiscovery'])->name('discoveries.resume');
+    Route::post('jobs/{job}/pause', [CollectionControlController::class, 'pauseJob'])->name('jobs.pause');
+    Route::post('jobs/{job}/resume', [CollectionControlController::class, 'resumeJob'])->name('jobs.resume');
     Route::post('discoveries', [DiscoveryController::class, 'store'])->middleware('throttle:discoveries')->name('discoveries.store');
     Route::get('discoveries/{discovery}', [DiscoveryController::class, 'show'])->name('discoveries.show');
     Route::post('discoveries/{discovery}/extract', [DiscoveryController::class, 'extract'])->name('discoveries.extract');

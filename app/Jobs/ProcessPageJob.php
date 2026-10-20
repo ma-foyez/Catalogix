@@ -11,7 +11,6 @@ use App\Services\Crawling\UrlTools;
 use App\Services\Extraction\PageOutcome;
 use App\Services\Extraction\PageProcessor;
 use App\Services\Extraction\ScrapeBroadcaster;
-use DateTimeInterface;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Queue\Queueable;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
@@ -29,6 +28,8 @@ class ProcessPageJob implements ShouldQueue
 
     public int $maxExceptions = 2;
 
+    public int $tries = 0;
+
     /** @var list<int> */
     public array $backoff = [15, 60];
 
@@ -41,11 +42,6 @@ class ProcessPageJob implements ShouldQueue
         $this->onQueue('pages');
     }
 
-    public function retryUntil(): DateTimeInterface
-    {
-        return now()->addHours(2);
-    }
-
     /**
      * @return list<object>
      */
@@ -53,6 +49,7 @@ class ProcessPageJob implements ShouldQueue
     {
         return [
             (new WithoutOverlapping('domain:'.(UrlTools::host($this->url) ?? 'unknown')))
+                ->shared()
                 ->releaseAfter(5)
                 ->expireAfter(240),
         ];
@@ -67,6 +64,16 @@ class ProcessPageJob implements ShouldQueue
         }
 
         $job = $target->scrapeJob;
+
+        if ($job->isPaused()) {
+            $this->release(30);
+
+            return;
+        }
+
+        if ($job->status->isFinished()) {
+            return;
+        }
 
         if ($job->status === JobStatus::Queued) {
             $job->forceFill(['status' => JobStatus::Running, 'started_at' => now()])->save();
@@ -109,12 +116,17 @@ class ProcessPageJob implements ShouldQueue
             $broadcaster->products($target, $outcome->saved->productIds);
         }
 
-        if ($outcome->hasNext()) {
+        $job->refreshTotals();
+
+        if ($job->limitReached()) {
+            $job->targets()->whereIn('status', [TargetStatus::Queued, TargetStatus::Crawling])
+                ->update(['status' => TargetStatus::Done, 'error' => null]);
+            $job->refreshTotals();
+        } elseif ($outcome->hasNext()) {
             self::dispatch($target->id, (string) $outcome->nextUrl, $this->page + 1, $outcome->strategy?->value)
                 ->delay(now()->addSeconds($delay->seconds()));
         }
 
-        $job->refreshTotals();
         $broadcaster->progress($job);
     }
 

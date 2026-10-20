@@ -3,6 +3,7 @@
 namespace App\Services\Discovery;
 
 use App\Services\Crawling\PageFetcher;
+use Closure;
 
 /**
  * Reads sitemap.xml files and sitemap indexes (gzip included). Category and collection
@@ -16,11 +17,26 @@ final class SitemapReader
 
     public function __construct(private readonly PageFetcher $fetcher) {}
 
+    private int $remainingRequests = 12;
+
+    private ?Closure $checkpoint = null;
+
+    public function begin(int $maxRequests, ?Closure $checkpoint = null): void
+    {
+        $this->remainingRequests = max(1, $maxRequests);
+        $this->checkpoint = $checkpoint;
+    }
+
     /**
      * @return list<string>
      */
     public function urls(string $sitemapUrl, int $limit, int $depth = 0): array
     {
+        if ($this->remainingRequests-- <= 0) {
+            return [];
+        }
+
+        ($this->checkpoint ?? static fn () => null)();
         $result = $this->fetcher->get($sitemapUrl, 'application/xml,text/xml;q=0.9,*/*;q=0.8');
 
         if (! $result->ok()) {
@@ -47,7 +63,7 @@ final class SitemapReader
         $urls = [];
 
         foreach ($this->orderChildren($locations) as $child) {
-            if (count($urls) >= $limit) {
+            if (count($urls) >= $limit || $this->remainingRequests <= 0) {
                 break;
             }
 

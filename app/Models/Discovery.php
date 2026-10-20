@@ -18,6 +18,8 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property int $user_id
  * @property int $site_id
  * @property bool $auto_extract
+ * @property int|null $max_products
+ * @property CarbonImmutable|null $paused_at
  * @property JobStatus $status
  * @property DiscoveryStage $stage
  * @property int $candidates
@@ -31,7 +33,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
  * @property-read User $user
  * @property-read ScrapeJob|null $latestJob
  */
-#[Fillable(['user_id', 'site_id', 'auto_extract', 'status', 'stage', 'candidates', 'probed', 'to_probe', 'routes_found', 'error', 'started_at', 'finished_at'])]
+#[Fillable(['user_id', 'site_id', 'auto_extract', 'max_products', 'paused_at', 'status', 'stage', 'candidates', 'probed', 'to_probe', 'routes_found', 'error', 'started_at', 'finished_at'])]
 class Discovery extends Model
 {
     /** @use HasFactory<DiscoveryFactory> */
@@ -51,6 +53,8 @@ class Discovery extends Model
     {
         return [
             'auto_extract' => 'boolean',
+            'max_products' => 'integer',
+            'paused_at' => 'datetime',
             'status' => JobStatus::class,
             'stage' => DiscoveryStage::class,
             'started_at' => 'datetime',
@@ -90,6 +94,7 @@ class Discovery extends Model
 
     public function isActive(): bool
     {
-        return ! $this->status->isFinished() || ($this->latestJob !== null && ! $this->latestJob->status->isFinished());
+        return $this->paused_at !== null || ! $this->status->isFinished()
+            || ($this->latestJob !== null && ($this->latestJob->paused_at !== null || ! $this->latestJob->status->isFinished()));
     }
 }

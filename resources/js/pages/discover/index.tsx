@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import DiscoveryController from '@/actions/App/Http/Controllers/DiscoveryController';
+import { CollectionControls } from '@/components/collection-controls';
 import { EmptyState } from '@/components/empty-state';
 import InputError from '@/components/input-error';
 import { PaginationLinks } from '@/components/pagination-links';
@@ -30,6 +31,7 @@ import {
     DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu';
 import { Label } from '@/components/ui/label';
+import { Input } from '@/components/ui/input';
 import { Spinner } from '@/components/ui/spinner';
 import { useExcelDownload } from '@/hooks/use-excel-download';
 import { useLivePoll } from '@/hooks/use-live-poll';
@@ -50,6 +52,7 @@ const PHASES: Record<
         active: boolean;
     }
 > = {
+    paused: { label: 'Paused', tone: 'warning', active: false },
     waiting: { label: 'Waiting', tone: 'neutral', active: true },
     finding: { label: 'Finding products', tone: 'brand', active: true },
     collecting: { label: 'Collecting products', tone: 'brand', active: true },
@@ -247,6 +250,26 @@ export default function Websites({ runs }: { runs: Paginated<SiteRun> }) {
                                         </div>
                                     </div>
                                     <InputError message={errors.domains} />
+                                    <div className="flex flex-wrap items-center gap-3">
+                                        <Label htmlFor="max_products">
+                                            Maximum products per website
+                                        </Label>
+                                        <Input
+                                            id="max_products"
+                                            name="max_products"
+                                            type="number"
+                                            min={1}
+                                            max={100000}
+                                            step={1}
+                                            placeholder="No limit"
+                                            className="w-36"
+                                        />
+                                        <span className="text-xs text-muted-foreground">
+                                            Stops collecting when the limit is
+                                            reached. Leave blank for no limit.
+                                        </span>
+                                    </div>
+                                    <InputError message={errors.max_products} />
                                 </>
                             )}
                         </Form>
@@ -397,6 +420,14 @@ function SiteCard({
                         </span>
                     </p>
 
+                    {run.max_products !== null && (
+                        <p className="text-xs text-muted-foreground">
+                            {formatCount(run.products)} /{' '}
+                            {formatCount(run.max_products)} products
+                            {run.limit_reached && ' · Limit reached'}
+                        </p>
+                    )}
+
                     {(run.products > 0 || run.images > 0) && (
                         <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
                             <span className="flex items-center gap-1">
@@ -429,6 +460,9 @@ function SiteCard({
                 </div>
 
                 <div className="flex w-full items-center gap-2 sm:w-auto">
+                    {(phase.active || run.paused) && (
+                        <CollectionControls id={run.id} paused={run.paused} />
+                    )}
                     {canView && (
                         <Button asChild variant="outline" size="sm">
                             <Link href={jobShow(run.job_id!)}>
@@ -522,7 +556,7 @@ function SiteCard({
 }
 
 function RunMenu({ run }: { run: SiteRun }) {
-    const working = PHASES[run.phase].active;
+    const working = PHASES[run.phase].active || run.paused;
 
     return (
         <DropdownMenu>

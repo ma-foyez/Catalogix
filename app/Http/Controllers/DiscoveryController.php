@@ -41,7 +41,7 @@ class DiscoveryController extends Controller
      */
     public function store(StoreDiscoveryRequest $request, DiscoveryService $discoveries): RedirectResponse
     {
-        ['started' => $started, 'skipped' => $skipped] = $discoveries->startMany($request->user(), $request->domains());
+        ['started' => $started, 'skipped' => $skipped] = $discoveries->startMany($request->user(), $request->domains(), true, $request->filled('max_products') ? $request->integer('max_products') : null);
 
         $message = match (true) {
             $started === [] => (count($skipped) === 1 ? "{$skipped[0]} is" : 'These websites are').' already being collected.',
@@ -94,7 +94,7 @@ class DiscoveryController extends Controller
 
     public function extract(ExtractRoutesRequest $request, Discovery $discovery, ExtractionService $extraction): RedirectResponse
     {
-        $job = $extraction->start($request->user(), $discovery, $request->routeIds());
+        $job = $extraction->start($request->user(), $discovery, $request->routeIds(), $request->filled('max_products') ? $request->integer('max_products') : null);
 
         return to_route('jobs.show', $job);
     }

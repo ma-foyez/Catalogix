@@ -6,6 +6,7 @@ use App\Enums\DiscoveryStage;
 use App\Enums\JobStatus;
 use App\Enums\RouteSource;
 use App\Events\RoutesDiscovered;
+use App\Exceptions\CollectionPaused;
 use App\Exceptions\RenderFailedException;
 use App\Http\Resources\DiscoveryResource;
 use App\Models\DiscoveredRoute;
@@ -35,6 +36,8 @@ final class DomainDiscoverer
     /** @var array<string, FetchResult> pages fetched during the menu crawl, reused by the prober */
     private array $fetched = [];
 
+    private ?Discovery $discovery = null;
+
     public function __construct(
         private readonly PageFetcher $fetcher,
         private readonly PageRenderer $renderer,
@@ -51,6 +54,8 @@ final class DomainDiscoverer
     public function run(Discovery $discovery): void
     {
         $this->fetched = [];
+        $this->discovery = $discovery;
+        $this->checkpoint();
         $site = $discovery->site;
 
         $discovery->forceFill([
@@ -81,6 +86,7 @@ final class DomainDiscoverer
         }
 
         $base = $this->origin($home->finalUrl);
+        $this->fetched[UrlTools::hash($base.'/')] = $home;
         $site->forceFill(['platform' => $this->platforms->detect($home->body), 'is_blocked' => false, 'blocked_reason' => null])->save();
 
         $candidates = new CandidateSet($site->domain, $this->classifier);
@@ -115,11 +121,13 @@ final class DomainDiscoverer
 
     private function fromSitemaps(CandidateSet $candidates, string $base): void
     {
+        $this->sitemaps->begin((int) config('catalogix.discovery.max_sitemap_requests', 12), fn () => $this->checkpoint());
         $limit = (int) config('catalogix.discovery.max_sitemap_urls', 5000);
         $sources = array_unique([...$this->robots->sitemaps($base.'/'), $base.'/sitemap.xml', $base.'/sitemap_index.xml']);
         $seen = 0;
 
         foreach ($sources as $sitemap) {
+            $this->checkpoint();
             if ($seen >= $limit) {
                 break;
             }
@@ -172,6 +180,11 @@ final class DomainDiscoverer
         $maxPages = (int) config('catalogix.discovery.max_menu_pages', 15);
         $depth = (int) config('catalogix.discovery.menu_depth', 2);
 
+        // Automatic collection can start from the first-level navigation; deep crawling is a fallback.
+        if ($this->discovery?->auto_extract) {
+            $maxPages = min($maxPages, (int) config('catalogix.discovery.auto_menu_pages', 3));
+        }
+
         foreach ($links as $link) {
             $candidates->add($link['url'], RouteSource::Menu, $link['text'] ?: null);
         }
@@ -181,6 +194,7 @@ final class DomainDiscoverer
         }
 
         foreach ($links as $link) {
+            $this->checkpoint();
             if ($followed >= $maxPages) {
                 break;
             }
@@ -210,6 +224,9 @@ final class DomainDiscoverer
     private function probeAll(Discovery $discovery, Site $site, CandidateSet $candidates): void
     {
         $maxProbes = (int) config('catalogix.discovery.max_probes', 40);
+        if ($discovery->auto_extract) {
+            $maxProbes = min($maxProbes, (int) config('catalogix.discovery.auto_max_probes', 12));
+        }
         $probed = 0;
         $best = 0;
         $weak = [];
@@ -219,6 +236,7 @@ final class DomainDiscoverer
         $this->stage($discovery, DiscoveryStage::Probing, $candidates);
 
         foreach ($ranked as $candidate) {
+            $this->checkpoint();
             if ($probed >= $maxProbes) {
                 $this->store($discovery, $candidate, new ProbeResult(
                     score: $candidate->source === RouteSource::PlatformApi && $candidate->estProducts > 0 ? 70 : 0,
@@ -273,6 +291,7 @@ final class DomainDiscoverer
         usort($routes, fn (DiscoveredRoute $a, DiscoveredRoute $b) => $b->score <=> $a->score);
 
         foreach (array_slice($routes, 0, self::JS_RETRY_ROUTES) as $route) {
+            $this->checkpoint();
             try {
                 $rendered = $this->renderer->render($route->url, (int) config('catalogix.render.scroll_steps', 6));
             } catch (RenderFailedException) {
@@ -330,6 +349,7 @@ final class DomainDiscoverer
 
     private function finish(Discovery $discovery, JobStatus $status, ?string $error = null): void
     {
+        $this->checkpoint();
         $discovery->forceFill([
             'status' => $status,
             'stage' => DiscoveryStage::Finished,
@@ -346,6 +366,7 @@ final class DomainDiscoverer
      */
     private function stage(Discovery $discovery, DiscoveryStage $stage, ?CandidateSet $candidates = null): void
     {
+        $this->checkpoint();
         $discovery->forceFill([
             'stage' => $stage,
             'candidates' => $candidates?->count() ?? $discovery->candidates,
@@ -366,5 +387,14 @@ final class DomainDiscoverer
         $parts = parse_url($url);
 
         return ($parts['scheme'] ?? 'https').'://'.($parts['host'] ?? '');
+    }
+
+    private function checkpoint(): void
+    {
+        $current = $this->discovery?->fresh();
+
+        if ($this->discovery !== null && ($current === null || $current->paused_at !== null)) {
+            throw new CollectionPaused;
+        }
     }
 }
